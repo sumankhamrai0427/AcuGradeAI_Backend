@@ -8,11 +8,13 @@ from utils.errors import ForbiddenError
 
 
 def roles_required(*allowed_roles):
+    normalized_allowed = {str(r).strip().upper() for r in allowed_roles}
+
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
-            role = getattr(g, "current_user_role", None)
-            if role not in allowed_roles:
+            role = str(getattr(g, "current_user_role", "")).strip().upper()
+            if role not in normalized_allowed:
                 raise ForbiddenError(f"This action requires one of: {', '.join(allowed_roles)}")
             return fn(*args, **kwargs)
 
@@ -21,15 +23,17 @@ def roles_required(*allowed_roles):
     return decorator
 
 
-def assert_owns_student(session, student_id: str, parent_user_id: str):
-    """Object-level authorization: a parent may only touch their own children.
-    Master prompt §8 — this is the concrete enforcement of that rule."""
+def assert_owns_student(session, student_id, parent_user_id):
+    """Object-level authorization: a parent may only touch their own children."""
     from model.models import Student
     from utils.errors import ForbiddenError, NotFoundError
 
-    student = session.get(Student, student_id)
+    s_id = int(student_id) if str(student_id).isdigit() else student_id
+    p_id = int(parent_user_id) if str(parent_user_id).isdigit() else parent_user_id
+
+    student = session.get(Student, s_id)
     if not student:
         raise NotFoundError("Student not found")
-    if student.parent_id != parent_user_id:
+    if student.parent_id != p_id:
         raise ForbiddenError("You do not have access to this student")
     return student

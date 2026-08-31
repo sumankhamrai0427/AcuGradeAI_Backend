@@ -102,9 +102,12 @@ def create_or_get_conversation():
     payload = request.get_json(force=True, silent=True) or {}
     require_fields(payload, ["teacherId", "studentId"])
 
+    teacher_id = int(payload["teacherId"]) if str(payload["teacherId"]).isdigit() else payload["teacherId"]
+    student_id = int(payload["studentId"]) if str(payload["studentId"]).isdigit() else payload["studentId"]
+
     with get_session() as session:
-        assert_owns_student(session, payload["studentId"], g.current_user_id)
-        teacher = session.get(Teacher, payload["teacherId"])
+        assert_owns_student(session, student_id, g.current_user_id)
+        teacher = session.get(Teacher, teacher_id)
         if not teacher:
             raise NotFoundError("Teacher not found")
 
@@ -112,15 +115,15 @@ def create_or_get_conversation():
             session.query(Conversation)
             .filter(
                 Conversation.parent_id == g.current_user_id,
-                Conversation.teacher_id == payload["teacherId"],
-                Conversation.student_id == payload["studentId"],
+                Conversation.teacher_id == teacher_id,
+                Conversation.student_id == student_id,
             )
             .one_or_none()
         )
         if not conversation:
             conversation = Conversation(
                 id=str(uuid.uuid4()), parent_id=g.current_user_id,
-                teacher_id=payload["teacherId"], student_id=payload["studentId"],
+                teacher_id=teacher_id, student_id=student_id,
             )
             session.add(conversation)
             session.flush()
@@ -178,13 +181,15 @@ def create_dossier():
     payload = request.get_json(force=True, silent=True) or {}
     require_fields(payload, ["studentId", "recipients"])
 
+    student_id = int(payload["studentId"]) if str(payload["studentId"]).isdigit() else payload["studentId"]
+
     with get_session() as session:
-        student = assert_owns_student(session, payload["studentId"], g.current_user_id)
+        student = assert_owns_student(session, student_id, g.current_user_id)
         submissions_count = session.query(ExamSubmission).filter(ExamSubmission.student_id == student.id).count()
 
         dossier = SharedDossier(
             id=str(uuid.uuid4()), student_id=student.id, parent_id=g.current_user_id,
-            share_token=f"ACU-SHARE-{secrets.token_hex(4).upper()}",  # server-generated, not client Math.random()
+            share_token=f"ACU-SHARE-{secrets.token_hex(4).upper()}",
             notes=payload.get("notes", ""), recipients=payload["recipients"],
             included_submissions_count=submissions_count, status="active",
             created_at=datetime.utcnow(), expires_at=datetime.utcnow() + timedelta(days=30),

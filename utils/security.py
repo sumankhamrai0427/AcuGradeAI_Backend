@@ -49,7 +49,7 @@ def verify_pin(raw_pin: str, pin_hash: str) -> bool:
 def _create_token(subject: str, role: str, expires_delta: timedelta, token_type: str) -> str:
     now = datetime.now(timezone.utc)
     payload = {
-        "sub": subject,
+        "sub": str(subject),
         "role": role,
         "type": token_type,
         "iat": now,

@@ -16,26 +16,61 @@ def gen_uuid() -> str:
 
 
 # ------------------------------------------------------------
-# Users & auth
+# 1. Roles & Dynamic Page Access
+# ------------------------------------------------------------
+class Role(Base):
+    __tablename__ = "roles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    role_name = Column(String(50), nullable=False, unique=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    users = relationship("User", back_populates="role")
+    menu_items = relationship("RolePageAccess", back_populates="role", cascade="all, delete-orphan")
+
+
+class RolePageAccess(Base):
+    __tablename__ = "role_page_access"
+    __table_args__ = (UniqueConstraint("role_id", "page_route", name="uq_role_page"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    role_id = Column(Integer, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
+    page_name = Column(String(100), nullable=False)
+    page_route = Column(String(100), nullable=False)
+    icon = Column(String(50), nullable=True)
+    menu_order = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    role = relationship("Role", back_populates="menu_items")
+
+
+# ------------------------------------------------------------
+# 2. Users & auth
 # ------------------------------------------------------------
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(String(36), primary_key=True, default=gen_uuid)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(150), nullable=False)
     email = Column(String(190), nullable=False, unique=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(Enum("STUDENT", "PARENT", "TEACHER", "ADMIN", "SUPER_ADMIN", name="user_role"), nullable=False)
-    status = Column(Enum("ACTIVE", "SUSPENDED", "DELETED", name="user_status"), nullable=False, default="ACTIVE")
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(Integer, nullable=True)
+
+    role = relationship("Role", back_populates="users")
 
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
-    id = Column(String(36), primary_key=True, default=gen_uuid)
-    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     token_hash = Column(String(255), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     revoked = Column(Boolean, default=False)
@@ -43,12 +78,12 @@ class RefreshToken(Base):
 
 
 # ------------------------------------------------------------
-# Parent / Student / Teacher
+# 3. Parent / Student / Teacher
 # ------------------------------------------------------------
 class Parent(Base):
     __tablename__ = "parents"
 
-    id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     subscription_tier = Column(
         Enum("free", "scholar_pro", "genius_competitive", name="subscription_tier"),
         nullable=False, default="free",
@@ -62,9 +97,9 @@ class Parent(Base):
 class Student(Base):
     __tablename__ = "students"
 
-    id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    parent_id = Column(String(36), ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
-    teacher_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    parent_id = Column(Integer, ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
+    teacher_id = Column(Integer, ForeignKey("teachers.id", ondelete="SET NULL"), nullable=True)
     avatar = Column(String(20), default="🧑‍🎓")
     class_grade = Column(String(20), nullable=False)
     target_board = Column(String(20), nullable=False)
@@ -87,7 +122,7 @@ class Student(Base):
 class Teacher(Base):
     __tablename__ = "teachers"
 
-    id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     role_title = Column(String(120), default="Subject Teacher")
     subject = Column(String(60), nullable=True)
     school_name = Column(String(190), nullable=False)
@@ -98,7 +133,7 @@ class Teacher(Base):
 
 
 # ------------------------------------------------------------
-# Curriculum / Runbooks
+# 4. Curriculum / Runbooks
 # ------------------------------------------------------------
 class Runbook(Base):
     __tablename__ = "runbooks"
@@ -116,7 +151,7 @@ class Runbook(Base):
     difficulty_calibration = Column(JSON, nullable=False)
     status = Column(Enum("DRAFT", "PUBLISHED", "ARCHIVED", name="runbook_status"), default="PUBLISHED")
     version = Column(Integer, default=1)
-    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -131,7 +166,7 @@ class Document(Base):
     board = Column(String(20), nullable=True)
     class_grade = Column(String(20), nullable=True)
     subject = Column(String(40), nullable=True)
-    uploaded_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    uploaded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     status = Column(Enum("PENDING", "PROCESSED", "FAILED", name="document_status"), default="PENDING")
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -148,13 +183,13 @@ class DocumentChunk(Base):
 
 
 # ------------------------------------------------------------
-# Exams / Questions / Submissions
+# 5. Exams / Questions / Submissions
 # ------------------------------------------------------------
 class Exam(Base):
     __tablename__ = "exams"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    student_id = Column(String(36), ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
     title = Column(String(255), nullable=False)
     board = Column(String(20), nullable=False)
     class_grade = Column(String(20), nullable=False)
@@ -200,7 +235,7 @@ class ExamSubmission(Base):
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
     exam_id = Column(String(36), ForeignKey("exams.id", ondelete="CASCADE"), nullable=False)
-    student_id = Column(String(36), ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
     answers = Column(JSON, nullable=False)
     marks_obtained = Column(Integer, nullable=False)
     total_marks = Column(Integer, default=10)
@@ -248,14 +283,14 @@ class DiagnosticAnalysis(Base):
 
 
 # ------------------------------------------------------------
-# Mastery / Misconceptions / Learning path
+# 6. Mastery / Misconceptions / Learning path
 # ------------------------------------------------------------
 class Mastery(Base):
     __tablename__ = "mastery"
     __table_args__ = (UniqueConstraint("student_id", "topic", name="uq_mastery_student_topic"),)
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    student_id = Column(String(36), ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
     topic = Column(String(190), nullable=False)
     mastery_score = Column(Numeric(5, 2), default=0)
     confidence = Column(Numeric(5, 2), default=0)
@@ -272,7 +307,7 @@ class Misconception(Base):
     __tablename__ = "misconceptions"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    student_id = Column(String(36), ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
     topic = Column(String(190), nullable=False)
     description = Column(String(500), nullable=False)
     evidence = Column(Text, nullable=True)
@@ -286,7 +321,7 @@ class LearningPathNode(Base):
     __tablename__ = "learning_path_nodes"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    student_id = Column(String(36), ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
     topic = Column(String(190), nullable=False)
     chapter_name = Column(String(190), nullable=False)
     subject = Column(String(40), nullable=False)
@@ -310,7 +345,7 @@ class LearningPathNode(Base):
 
 
 # ------------------------------------------------------------
-# Gamification
+# 7. Gamification
 # ------------------------------------------------------------
 class Badge(Base):
     __tablename__ = "badges"
@@ -328,7 +363,7 @@ class Badge(Base):
 class StudentBadge(Base):
     __tablename__ = "student_badges"
 
-    student_id = Column(String(36), ForeignKey("students.id", ondelete="CASCADE"), primary_key=True)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), primary_key=True)
     badge_id = Column(String(60), ForeignKey("badges.id", ondelete="CASCADE"), primary_key=True)
     unlocked_at = Column(DateTime, default=datetime.utcnow)
 
@@ -337,23 +372,23 @@ class XPEvent(Base):
     __tablename__ = "xp_events"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    student_id = Column(String(36), ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
     amount = Column(Integer, nullable=False)
     reason = Column(String(190), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
 # ------------------------------------------------------------
-# Parent-teacher communication
+# 8. Parent-teacher communication
 # ------------------------------------------------------------
 class Conversation(Base):
     __tablename__ = "conversations"
     __table_args__ = (UniqueConstraint("parent_id", "teacher_id", "student_id", name="uq_conv"),)
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    parent_id = Column(String(36), ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
-    teacher_id = Column(String(36), ForeignKey("teachers.id", ondelete="CASCADE"), nullable=False)
-    student_id = Column(String(36), ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    parent_id = Column(Integer, ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
+    teacher_id = Column(Integer, ForeignKey("teachers.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan",
@@ -366,7 +401,7 @@ class Message(Base):
     id = Column(String(36), primary_key=True, default=gen_uuid)
     conversation_id = Column(String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
     sender_role = Column(Enum("parent", "teacher", name="sender_role"), nullable=False)
-    sender_id = Column(String(36), nullable=False)
+    sender_id = Column(Integer, nullable=False)
     message = Column(Text, nullable=False)
     attached_submission_id = Column(String(36), ForeignKey("exam_submissions.id", ondelete="SET NULL"), nullable=True)
     action_items = Column(JSON, nullable=True)
@@ -380,8 +415,8 @@ class SharedDossier(Base):
     __tablename__ = "shared_dossiers"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    student_id = Column(String(36), ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
-    parent_id = Column(String(36), ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    parent_id = Column(Integer, ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
     share_token = Column(String(60), nullable=False, unique=True)
     notes = Column(Text, nullable=True)
     recipients = Column(JSON, nullable=False)
@@ -392,7 +427,7 @@ class SharedDossier(Base):
 
 
 # ------------------------------------------------------------
-# Subscriptions
+# 9. Subscriptions
 # ------------------------------------------------------------
 class SubscriptionPlan(Base):
     __tablename__ = "subscription_plans"
@@ -414,7 +449,7 @@ class Subscription(Base):
     __tablename__ = "subscriptions"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    parent_id = Column(String(36), ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
+    parent_id = Column(Integer, ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
     plan_id = Column(String(30), ForeignKey("subscription_plans.id"), nullable=False)
     status = Column(Enum("ACTIVE", "EXPIRED", "CANCELLED", name="subscription_status"), default="ACTIVE")
     start_date = Column(DateTime, default=datetime.utcnow)
@@ -422,13 +457,13 @@ class Subscription(Base):
 
 
 # ------------------------------------------------------------
-# Audit
+# 10. Audit
 # ------------------------------------------------------------
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     action = Column(String(120), nullable=False)
     entity_type = Column(String(60), nullable=True)
     entity_id = Column(String(60), nullable=True)

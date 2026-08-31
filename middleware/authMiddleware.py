@@ -33,8 +33,9 @@ def token_required(fn):
         if payload.get("type") != "access":
             raise UnauthorizedError("Refresh tokens cannot be used to access this endpoint")
 
-        g.current_user_id = payload["sub"]
-        g.current_user_role = payload["role"]
+        sub = payload["sub"]
+        g.current_user_id = int(sub) if str(sub).isdigit() else sub
+        g.current_user_role = str(payload.get("role", "")).upper()
         return fn(*args, **kwargs)
 
     return wrapper

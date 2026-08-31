@@ -22,7 +22,8 @@ def _resolve_student_for_request(session, payload: dict) -> Student:
     """A parent generates an exam on behalf of a named child; a student
     token (from /auth/child-login) generates it for themselves."""
     if g.current_user_role == "STUDENT":
-        student = session.get(Student, g.current_user_id)
+        s_id = int(g.current_user_id) if str(g.current_user_id).isdigit() else g.current_user_id
+        student = session.get(Student, s_id)
         if not student:
             raise NotFoundError("Student not found")
         return student
@@ -52,8 +53,7 @@ def generate_exam():
         student = _resolve_student_for_request(session, payload)
         _reset_daily_quota_if_new_day(student)
 
-        # Quota is re-checked here server-side regardless of what the client
-        # believes its remaining quota is (master prompt §27).
+        # Quota is re-checked here server-side
         parent = session.get(Parent, student.parent_id)
         plan = session.get(SubscriptionPlan, parent.subscription_tier) if parent else None
         if plan and plan.daily_exam_limit != "unlimited":
@@ -97,10 +97,12 @@ def submit_exam(exam_id):
         if not exam:
             raise NotFoundError("Exam not found")
 
-        if g.current_user_role == "STUDENT" and exam.student_id != g.current_user_id:
+        current_uid = int(g.current_user_id) if str(g.current_user_id).isdigit() else g.current_user_id
+
+        if g.current_user_role == "STUDENT" and exam.student_id != current_uid:
             raise AppError("FORBIDDEN", "This exam does not belong to you", 403)
         elif g.current_user_role == "PARENT":
-            assert_owns_student(session, exam.student_id, g.current_user_id)
+            assert_owns_student(session, exam.student_id, current_uid)
 
         if exam.status == "SUBMITTED":
             raise AppError("ALREADY_SUBMITTED", "This exam has already been submitted", 409)
@@ -147,7 +149,7 @@ def submit_exam(exam_id):
 
         exam.status = "SUBMITTED"
 
-        # Server-side XP/badges — the client can no longer compute or submit these.
+        # Server-side XP/badges
         xp_earned = gamification_engine.compute_exam_xp(marks_obtained, time_taken_seconds)
         newly_unlocked_badges = gamification_engine.evaluate_badge_unlocks(
             session, student, marks_obtained, time_taken_seconds, exam.difficulty

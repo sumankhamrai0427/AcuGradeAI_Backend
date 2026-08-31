@@ -5,7 +5,7 @@ from flask import Blueprint, request, g
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import roles_required, assert_owns_student
-from model.models import Parent, Student, User, ExamSubmission, LearningPathNode, StudentBadge, SubscriptionPlan
+from model.models import Parent, Student, User, Role, ExamSubmission, LearningPathNode, StudentBadge, SubscriptionPlan
 from utils.errors import AppError, NotFoundError
 from utils.response import success
 from utils.security import hash_pin
@@ -15,8 +15,9 @@ from utils.validators import require_fields, validate_board, validate_class_grad
 parent_bp = Blueprint("parent", __name__, url_prefix="/api/v1/parents")
 
 
-def _badge_ids_for(session, student_id: str) -> list[str]:
-    rows = session.query(StudentBadge).filter(StudentBadge.student_id == student_id).all()
+def _badge_ids_for(session, student_id) -> list[str]:
+    s_id = int(student_id) if str(student_id).isdigit() else student_id
+    rows = session.query(StudentBadge).filter(StudentBadge.student_id == s_id).all()
     return [r.badge_id for r in rows]
 
 
@@ -30,7 +31,6 @@ def get_me():
             raise NotFoundError("User account not found")
         parent = session.get(Parent, g.current_user_id)
         if not parent:
-            # Self-healing fallback for parent accounts
             parent = Parent(id=user.id, subscription_tier="free")
             session.add(parent)
             session.flush()
@@ -72,23 +72,29 @@ def add_child():
                 403,
             )
 
-        user_id = str(uuid.uuid4())
-        # Child accounts don't log in with email/password; store a synthetic
-        # unique email so the users table's UNIQUE constraint stays honest.
-        synthetic_email = f"child+{user_id}@acugrade.local"
+        role_record = session.query(Role).filter(Role.role_name == "STUDENT").first()
+        student_role_id = role_record.id if role_record else 1
+
         user = User(
-            id=user_id, name=payload["name"], email=synthetic_email,
-            password_hash=hash_pin(payload["pin"]),  # unused login path; PIN is the real credential
-            role="STUDENT", status="ACTIVE",
+            name=payload["name"],
+            email=f"child+{uuid.uuid4()}@acugrade.local",
+            password_hash=hash_pin(payload["pin"]),
+            role_id=student_role_id,
+            is_active=True,
         )
         session.add(user)
         session.flush()
 
         student = Student(
-            id=user_id, parent_id=parent.id, avatar=payload.get("avatar", "🧑‍🎓"),
-            class_grade=payload["classGrade"], target_board=payload["targetBoard"],
-            school_name=payload.get("schoolName"), pin_hash=hash_pin(payload["pin"]),
-            xp=250, level=1,
+            id=user.id,
+            parent_id=parent.id,
+            avatar=payload.get("avatar", "🧑‍🎓"),
+            class_grade=payload["classGrade"],
+            target_board=payload["targetBoard"],
+            school_name=payload.get("schoolName"),
+            pin_hash=hash_pin(payload["pin"]),
+            xp=250,
+            level=1,
         )
         session.add(student)
         session.flush()
@@ -100,8 +106,10 @@ def add_child():
 @roles_required("PARENT")
 def update_child(student_id):
     payload = request.get_json(force=True, silent=True) or {}
+    s_id = int(student_id) if str(student_id).isdigit() else student_id
+
     with get_session() as session:
-        student = assert_owns_student(session, student_id, g.current_user_id)
+        student = assert_owns_student(session, s_id, g.current_user_id)
 
         if "name" in payload and student.user:
             student.user.name = payload["name"]
@@ -122,8 +130,9 @@ def update_child(student_id):
 @token_required
 @roles_required("PARENT")
 def delete_child(student_id):
+    s_id = int(student_id) if str(student_id).isdigit() else student_id
     with get_session() as session:
-        student = assert_owns_student(session, student_id, g.current_user_id)
+        student = assert_owns_student(session, s_id, g.current_user_id)
         user = session.get(User, student.id)
         session.delete(student)
         if user:
@@ -135,11 +144,12 @@ def delete_child(student_id):
 @token_required
 @roles_required("PARENT")
 def child_overview(student_id):
+    s_id = int(student_id) if str(student_id).isdigit() else student_id
     with get_session() as session:
-        student = assert_owns_student(session, student_id, g.current_user_id)
+        student = assert_owns_student(session, s_id, g.current_user_id)
         recent_submissions = (
             session.query(ExamSubmission)
-            .filter(ExamSubmission.student_id == student_id)
+            .filter(ExamSubmission.student_id == s_id)
             .order_by(ExamSubmission.submitted_at.desc())
             .limit(10)
             .all()
@@ -149,7 +159,7 @@ def child_overview(student_id):
         return success({
             "child": student_to_child_account(student, _badge_ids_for(session, student.id)),
             "recentExams": [submission_to_dict(s) for s in recent_submissions],
-            "topicMastery": get_topic_mastery_map(session, student_id),
+            "topicMastery": get_topic_mastery_map(session, s_id),
         })
 
 
@@ -157,7 +167,8 @@ def child_overview(student_id):
 @token_required
 @roles_required("PARENT")
 def child_learning_path(student_id):
+    s_id = int(student_id) if str(student_id).isdigit() else student_id
     with get_session() as session:
-        assert_owns_student(session, student_id, g.current_user_id)
-        nodes = session.query(LearningPathNode).filter(LearningPathNode.student_id == student_id).all()
+        assert_owns_student(session, s_id, g.current_user_id)
+        nodes = session.query(LearningPathNode).filter(LearningPathNode.student_id == s_id).all()
         return success([learning_path_node_to_dict(n) for n in nodes])
