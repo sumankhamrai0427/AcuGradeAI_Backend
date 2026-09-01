@@ -7,7 +7,7 @@ from flask import Blueprint, request, g
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import roles_required, assert_owns_student
-from model.models import Teacher, Conversation, Message, SharedDossier, ExamSubmission
+from model.models import Teacher, Conversation, Message, SharedDossier, ExamSubmission, PTMSchedule
 from utils.errors import NotFoundError, ValidationError
 from utils.response import success
 from utils.validators import require_fields
@@ -206,3 +206,74 @@ def list_dossiers():
     with get_session() as session:
         dossiers = session.query(SharedDossier).filter(SharedDossier.parent_id == g.current_user_id).all()
         return success([_dossier_to_dict(d) for d in dossiers])
+
+
+def _ptm_to_dict(ptm: PTMSchedule) -> dict:
+    teacher_user = ptm.teacher.user if ptm.teacher and ptm.teacher.user else None
+    student_user = ptm.student.user if ptm.student and ptm.student.user else None
+    return {
+        "id": ptm.id,
+        "parentId": ptm.parent_id,
+        "teacherId": ptm.teacher_id,
+        "teacherName": teacher_user.name if teacher_user else "Teacher",
+        "studentId": ptm.student_id,
+        "studentName": student_user.name if student_user else "Student",
+        "scheduledAt": ptm.scheduled_at.isoformat(),
+        "topic": ptm.topic,
+        "meetingLink": ptm.meeting_link or f"https://meet.google.com/acu-ptm-{ptm.id[:8]}",
+        "status": ptm.status,
+        "createdAt": ptm.created_at.isoformat(),
+    }
+
+
+@communication_bp.post("/ptm/schedule")
+@token_required
+@roles_required("PARENT")
+def schedule_ptm():
+    payload = request.get_json(force=True, silent=True) or {}
+    require_fields(payload, ["teacherId", "studentId", "scheduledAt", "topic"])
+
+    teacher_id = int(payload["teacherId"]) if str(payload["teacherId"]).isdigit() else payload["teacherId"]
+    student_id = int(payload["studentId"]) if str(payload["studentId"]).isdigit() else payload["studentId"]
+
+    try:
+        scheduled_dt = datetime.fromisoformat(payload["scheduledAt"].replace("Z", "+00:00"))
+    except Exception:
+        scheduled_dt = datetime.utcnow() + timedelta(days=1)
+
+    meeting_code = secrets.token_hex(3)
+    meeting_link = f"https://meet.google.com/acu-{meeting_code[:3]}-{meeting_code[3:]}"
+
+    with get_session() as session:
+        student = assert_owns_student(session, student_id, g.current_user_id)
+        teacher = session.get(Teacher, teacher_id)
+        if not teacher:
+            raise NotFoundError("Teacher not found")
+
+        ptm = PTMSchedule(
+            id=str(uuid.uuid4()),
+            parent_id=g.current_user_id,
+            teacher_id=teacher_id,
+            student_id=student.id,
+            scheduled_at=scheduled_dt,
+            topic=payload["topic"][:250],
+            meeting_link=meeting_link,
+            status="SCHEDULED",
+            created_at=datetime.utcnow(),
+        )
+        session.add(ptm)
+        session.flush()
+        return success(_ptm_to_dict(ptm), 201)
+
+
+@communication_bp.get("/ptm/schedules")
+@token_required
+def list_ptm_schedules():
+    with get_session() as session:
+        if g.current_user_role == "PARENT":
+            ptms = session.query(PTMSchedule).filter(PTMSchedule.parent_id == g.current_user_id).order_by(PTMSchedule.scheduled_at.asc()).all()
+        elif g.current_user_role == "TEACHER":
+            ptms = session.query(PTMSchedule).filter(PTMSchedule.teacher_id == g.current_user_id).order_by(PTMSchedule.scheduled_at.asc()).all()
+        else:
+            ptms = session.query(PTMSchedule).order_by(PTMSchedule.scheduled_at.asc()).all()
+        return success([_ptm_to_dict(p) for p in ptms])

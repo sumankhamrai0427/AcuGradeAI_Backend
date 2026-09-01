@@ -384,6 +384,21 @@ CREATE TABLE IF NOT EXISTS shared_dossiers (
   UNIQUE KEY uq_dossier_token (share_token)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS ptm_schedules (
+  id           CHAR(36)     NOT NULL PRIMARY KEY,
+  parent_id    INT          NOT NULL,
+  teacher_id   INT          NOT NULL,
+  student_id   INT          NOT NULL,
+  scheduled_at DATETIME     NOT NULL,
+  topic        VARCHAR(255) NOT NULL,
+  meeting_link VARCHAR(255) NULL,
+  status       ENUM('SCHEDULED','COMPLETED','CANCELLED') NOT NULL DEFAULT 'SCHEDULED',
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_ptm_parent  FOREIGN KEY (parent_id)  REFERENCES parents(id)  ON DELETE CASCADE,
+  CONSTRAINT fk_ptm_teacher FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ptm_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 -- ------------------------------------------------------------
 -- 9. SUBSCRIPTIONS & PLANS
 -- ------------------------------------------------------------

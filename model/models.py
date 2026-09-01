@@ -245,6 +245,8 @@ class ExamSubmission(Base):
 
     evaluations = relationship("QuestionEvaluation", cascade="all, delete-orphan")
     analysis = relationship("DiagnosticAnalysis", uselist=False, cascade="all, delete-orphan")
+    exam = relationship("Exam")
+    student = relationship("Student")
 
 
 class QuestionEvaluation(Base):
@@ -257,6 +259,8 @@ class QuestionEvaluation(Base):
     is_correct = Column(Boolean, nullable=False)
     marks_awarded = Column(Integer, nullable=False)
     misconception_identified = Column(String(255), nullable=True)
+
+    question = relationship("Question")
 
 
 class DiagnosticAnalysis(Base):
@@ -424,6 +428,24 @@ class SharedDossier(Base):
     status = Column(Enum("active", "revoked", name="dossier_status"), default="active")
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
+
+
+class PTMSchedule(Base):
+    __tablename__ = "ptm_schedules"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    parent_id = Column(Integer, ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
+    teacher_id = Column(Integer, ForeignKey("teachers.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    scheduled_at = Column(DateTime, nullable=False)
+    topic = Column(String(255), nullable=False)
+    meeting_link = Column(String(255), nullable=True)
+    status = Column(Enum("SCHEDULED", "COMPLETED", "CANCELLED", name="ptm_status"), default="SCHEDULED")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    parent = relationship("Parent")
+    teacher = relationship("Teacher")
+    student = relationship("Student")
 
 
 # ------------------------------------------------------------
