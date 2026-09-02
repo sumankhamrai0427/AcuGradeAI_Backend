@@ -425,9 +425,14 @@ class SharedDossier(Base):
     notes = Column(Text, nullable=True)
     recipients = Column(JSON, nullable=False)
     included_submissions_count = Column(Integer, default=0)
+    view_count = Column(Integer, default=0)
+    last_viewed_at = Column(DateTime, nullable=True)
     status = Column(Enum("active", "revoked", name="dossier_status"), default="active")
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
+
+    student = relationship("Student", foreign_keys=[student_id])
+    parent = relationship("Parent", foreign_keys=[parent_id])
 
 
 class PTMSchedule(Base):

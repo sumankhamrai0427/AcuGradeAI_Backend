@@ -7,9 +7,10 @@ from flask import Blueprint, request, g
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import roles_required, assert_owns_student
-from model.models import Teacher, Conversation, Message, SharedDossier, ExamSubmission, PTMSchedule
+from model.models import Teacher, Conversation, Message, SharedDossier, ExamSubmission, PTMSchedule, Student, User, Mastery
 from utils.errors import NotFoundError, ValidationError
 from utils.response import success
+from utils.serializers import submission_to_dict
 from utils.validators import require_fields
 
 communication_bp = Blueprint("communication", __name__, url_prefix="/api/v1")
@@ -44,15 +45,22 @@ def _message_to_dict(message: Message) -> dict:
 
 
 def _dossier_to_dict(d: SharedDossier) -> dict:
+    student_user = d.student.user if d.student and d.student.user else None
+    parent_user = d.parent.user if d.parent and d.parent.user else None
     return {
         "id": d.id,
         "studentId": d.student_id,
+        "childId": str(d.student_id),
+        "childName": student_user.name if student_user else "Student",
+        "parentName": parent_user.name if parent_user else "Parent",
         "shareToken": d.share_token,
         "createdAt": d.created_at.isoformat(),
         "expiresAt": d.expires_at.isoformat(),
         "notes": d.notes,
         "recipients": d.recipients,
         "includedSubmissionsCount": d.included_submissions_count,
+        "viewCount": getattr(d, 'view_count', 0) or 0,
+        "lastViewedAt": d.last_viewed_at.isoformat() if getattr(d, 'last_viewed_at', None) else None,
         "status": d.status,
     }
 
@@ -206,6 +214,116 @@ def list_dossiers():
     with get_session() as session:
         dossiers = session.query(SharedDossier).filter(SharedDossier.parent_id == g.current_user_id).all()
         return success([_dossier_to_dict(d) for d in dossiers])
+
+
+@communication_bp.get("/dossiers/public/<share_token>")
+def get_public_dossier(share_token):
+    with get_session() as session:
+        dossier = (
+            session.query(SharedDossier)
+            .filter(SharedDossier.share_token == share_token)
+            .one_or_none()
+        )
+        if not dossier:
+            raise NotFoundError("Academic dossier not found or link has expired")
+        if dossier.expires_at and dossier.expires_at < datetime.utcnow():
+            raise NotFoundError("This academic dossier share link has expired")
+
+        student = session.get(Student, dossier.student_id)
+        if not student:
+            raise NotFoundError("Student record not found")
+
+        student_user = session.get(User, student.id)
+        parent_user = session.get(User, dossier.parent_id)
+
+        submissions = (
+            session.query(ExamSubmission)
+            .filter(ExamSubmission.student_id == student.id)
+            .order_by(ExamSubmission.submitted_at.desc())
+            .limit(10)
+            .all()
+        )
+
+        mastery_rows = (
+            session.query(Mastery)
+            .filter(Mastery.student_id == str(student.id))
+            .all()
+        )
+        topic_mastery = {m.topic: float(m.mastery_score) for m in mastery_rows}
+
+        # Increment view count
+        dossier.view_count = (getattr(dossier, 'view_count', 0) or 0) + 1
+        dossier.last_viewed_at = datetime.utcnow()
+        session.flush()
+
+        return success({
+            "dossier": _dossier_to_dict(dossier),
+            "student": {
+                "id": student.id,
+                "name": student_user.name if student_user else "Student",
+                "avatar": student.avatar,
+                "classGrade": student.class_grade,
+                "targetBoard": student.target_board,
+                "schoolName": student.school_name,
+                "totalExamsTaken": student.total_exams_taken,
+                "averageScore": float(student.average_score or 0),
+                "streakDays": student.streak_days,
+                "xp": student.xp,
+                "level": student.level,
+            },
+            "parent": {
+                "name": parent_user.name if parent_user else "Parent",
+                "email": parent_user.email if parent_user else "",
+            },
+            "recentSubmissions": [submission_to_dict(s) for s in submissions],
+            "topicMastery": topic_mastery,
+        })
+
+
+@communication_bp.delete("/dossiers/<dossier_id>")
+@token_required
+@roles_required("PARENT")
+def delete_dossier(dossier_id):
+    with get_session() as session:
+        dossier = session.get(SharedDossier, dossier_id)
+        if not dossier:
+            raise NotFoundError("Academic dossier not found")
+        if dossier.parent_id != g.current_user_id:
+            raise ValidationError("You may only revoke dossiers created by your account")
+        
+        session.delete(dossier)
+        session.flush()
+        return success({"deletedId": dossier_id, "message": "Academic dossier revoked successfully"})
+
+
+@communication_bp.get("/dossiers/preview/<student_id>")
+@token_required
+@roles_required("PARENT")
+def preview_student_dossier(student_id):
+    sid = int(student_id) if str(student_id).isdigit() else student_id
+    with get_session() as session:
+        student = assert_owns_student(session, sid, g.current_user_id)
+        submissions = (
+            session.query(ExamSubmission)
+            .filter(ExamSubmission.student_id == student.id)
+            .order_by(ExamSubmission.submitted_at.desc())
+            .limit(5)
+            .all()
+        )
+        mastery_rows = session.query(Mastery).filter(Mastery.student_id == str(student.id)).all()
+        topic_mastery = {m.topic: float(m.mastery_score) for m in mastery_rows}
+
+        return success({
+            "studentId": student.id,
+            "name": student.user.name if student.user else "Student",
+            "avatar": student.avatar,
+            "classGrade": student.class_grade,
+            "targetBoard": student.target_board,
+            "totalExamsTaken": student.total_exams_taken,
+            "averageScore": float(student.average_score or 0),
+            "topicMastery": topic_mastery,
+            "recentExamsCount": len(submissions),
+        })
 
 
 def _ptm_to_dict(ptm: PTMSchedule) -> dict:
