@@ -1,4 +1,4 @@
-from flask import Blueprint, request, g
+from flask import request, g
 
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
@@ -7,8 +7,6 @@ from model.models import SubscriptionPlan, Parent
 from utils.errors import ValidationError
 from utils.response import success
 from utils.validators import require_fields
-
-subscription_bp = Blueprint("subscription", __name__, url_prefix="/api/v1/subscriptions")
 
 
 def _plan_to_dict(plan: SubscriptionPlan) -> dict:
@@ -27,7 +25,6 @@ def _plan_to_dict(plan: SubscriptionPlan) -> dict:
     }
 
 
-@subscription_bp.get("/plans")
 def list_plans():
     """Public — pricing pages don't require auth."""
     with get_session() as session:
@@ -35,7 +32,6 @@ def list_plans():
         return success([_plan_to_dict(p) for p in plans])
 
 
-@subscription_bp.post("/upgrade")
 @token_required
 @roles_required("PARENT")
 def upgrade_plan():
@@ -55,3 +51,4 @@ def upgrade_plan():
         parent = session.get(Parent, g.current_user_id)
         parent.subscription_tier = plan.id
         return success({"subscriptionTier": parent.subscription_tier})
+

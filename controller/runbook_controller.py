@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from flask import Blueprint, request, g
+from flask import request, g
 
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
@@ -12,10 +12,8 @@ from utils.response import success
 from utils.serializers import runbook_to_dict
 from utils.validators import require_fields, validate_board, validate_class_grade, validate_subject
 
-runbook_bp = Blueprint("runbook", __name__, url_prefix="/api/v1/runbooks")
 
 
-@runbook_bp.get("")
 def list_runbooks():
     """Public read — matches the frontend's original unauthenticated
     GET /api/runbooks used by SuperAdminPanel's list view."""
@@ -35,7 +33,6 @@ def list_runbooks():
         return success([runbook_to_dict(rb) for rb in results], count=len(results))
 
 
-@runbook_bp.get("/<runbook_id>")
 def get_runbook(runbook_id):
     with get_session() as session:
         rb = session.get(Runbook, runbook_id)
@@ -44,7 +41,6 @@ def get_runbook(runbook_id):
         return success(runbook_to_dict(rb))
 
 
-@runbook_bp.post("")
 @token_required
 @roles_required("ADMIN", "SUPER_ADMIN")
 def create_runbook():
@@ -77,7 +73,6 @@ def create_runbook():
         return success(runbook_to_dict(rb), 201, message="Runbook added successfully to K-Graph")
 
 
-@runbook_bp.put("/<runbook_id>")
 @token_required
 @roles_required("ADMIN", "SUPER_ADMIN")
 def update_runbook(runbook_id):
@@ -102,7 +97,6 @@ def update_runbook(runbook_id):
         return success(runbook_to_dict(rb), message="Runbook updated")
 
 
-@runbook_bp.delete("/<runbook_id>")
 @token_required
 @roles_required("ADMIN", "SUPER_ADMIN")
 def delete_runbook(runbook_id):

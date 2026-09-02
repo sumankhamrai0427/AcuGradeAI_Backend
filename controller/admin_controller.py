@@ -1,6 +1,6 @@
 from datetime import date
 
-from flask import Blueprint, g
+from flask import g
 
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
@@ -12,10 +12,7 @@ from utils.pagination import get_pagination_params, paginated_response
 from utils.response import success
 from utils.serializers import student_to_child_account
 
-admin_bp = Blueprint("admin", __name__, url_prefix="/api/v1/admin")
 
-
-@admin_bp.get("/statistics")
 def statistics():
     """Public — matches the frontend's original unauthenticated GET /api/stats
     used by SuperAdminPanel's analytics tab and homepage counters."""
@@ -39,7 +36,6 @@ def statistics():
         })
 
 
-@admin_bp.get("/dashboard")
 @token_required
 @roles_required("ADMIN", "SUPER_ADMIN")
 def admin_dashboard():
@@ -53,7 +49,6 @@ def admin_dashboard():
         })
 
 
-@admin_bp.get("/users")
 @token_required
 @roles_required("ADMIN", "SUPER_ADMIN")
 def list_users():
@@ -69,7 +64,6 @@ def list_users():
         return success(paginated_response(items, total, page, limit))
 
 
-@admin_bp.get("/students")
 @token_required
 @roles_required("ADMIN", "SUPER_ADMIN")
 def list_students():
@@ -81,7 +75,6 @@ def list_students():
         return success(paginated_response(items, total, page, limit))
 
 
-@admin_bp.post("/children/<student_id>/reset-quota")
 @token_required
 @roles_required("ADMIN", "SUPER_ADMIN", "PARENT")
 def reset_quota(student_id):
@@ -94,3 +87,4 @@ def reset_quota(student_id):
         student.daily_exams_taken_today = 0
         student.last_exam_date = date.today()
         return success({"reset": True})
+

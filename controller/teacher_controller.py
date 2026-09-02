@@ -1,4 +1,4 @@
-from flask import Blueprint, g
+from flask import g
 
 from database.dbConnection import get_session
 from helper.mastery_engine import get_topic_mastery_map
@@ -9,8 +9,6 @@ from utils.errors import NotFoundError
 from utils.response import success
 from utils.serializers import student_to_child_account, misconception_to_dict
 
-teacher_bp = Blueprint("teacher", __name__, url_prefix="/api/v1/teachers")
-
 
 def _assert_teacher_owns_student(session, student_id: str, teacher_id: str) -> Student:
     student = session.get(Student, student_id)
@@ -19,7 +17,6 @@ def _assert_teacher_owns_student(session, student_id: str, teacher_id: str) -> S
     return student
 
 
-@teacher_bp.get("/me/students")
 @token_required
 @roles_required("TEACHER")
 def my_students():
@@ -28,7 +25,6 @@ def my_students():
         return success([student_to_child_account(s) for s in students])
 
 
-@teacher_bp.get("/me/students/<student_id>/performance")
 @token_required
 @roles_required("TEACHER")
 def student_performance(student_id):
@@ -37,7 +33,6 @@ def student_performance(student_id):
         return success(student_to_child_account(student))
 
 
-@teacher_bp.get("/me/students/<student_id>/mastery")
 @token_required
 @roles_required("TEACHER")
 def student_mastery(student_id):
@@ -46,7 +41,6 @@ def student_mastery(student_id):
         return success(get_topic_mastery_map(session, student_id))
 
 
-@teacher_bp.get("/me/students/<student_id>/diagnostics")
 @token_required
 @roles_required("TEACHER")
 def student_diagnostics(student_id):
@@ -54,3 +48,4 @@ def student_diagnostics(student_id):
         _assert_teacher_owns_student(session, student_id, g.current_user_id)
         rows = session.query(Misconception).filter(Misconception.student_id == student_id).all()
         return success([misconception_to_dict(m) for m in rows])
+

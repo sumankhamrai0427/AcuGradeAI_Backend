@@ -2,7 +2,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta
 
-from flask import Blueprint, request, g
+from flask import request, g
 
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
@@ -13,7 +13,6 @@ from utils.response import success
 from utils.serializers import submission_to_dict
 from utils.validators import require_fields
 
-communication_bp = Blueprint("communication", __name__, url_prefix="/api/v1")
 
 
 def _teacher_to_dict(teacher: Teacher) -> dict:
@@ -65,7 +64,6 @@ def _dossier_to_dict(d: SharedDossier) -> dict:
     }
 
 
-@communication_bp.get("/teachers")
 @token_required
 def list_teachers():
     with get_session() as session:
@@ -73,7 +71,6 @@ def list_teachers():
         return success([_teacher_to_dict(t) for t in teachers])
 
 
-@communication_bp.get("/conversations")
 @token_required
 @roles_required("PARENT")
 def list_conversations():
@@ -89,7 +86,6 @@ def list_conversations():
         ])
 
 
-@communication_bp.get("/conversations/<conversation_id>")
 @token_required
 def get_conversation(conversation_id):
     with get_session() as session:
@@ -103,7 +99,6 @@ def get_conversation(conversation_id):
         return success([_message_to_dict(m) for m in conversation.messages])
 
 
-@communication_bp.post("/conversations")
 @token_required
 @roles_required("PARENT")
 def create_or_get_conversation():
@@ -138,7 +133,6 @@ def create_or_get_conversation():
         return success({"id": conversation.id}, 201)
 
 
-@communication_bp.post("/conversations/<conversation_id>/messages")
 @token_required
 def send_message(conversation_id):
     payload = request.get_json(force=True, silent=True) or {}
@@ -171,7 +165,6 @@ def send_message(conversation_id):
         return success(_message_to_dict(message), 201)
 
 
-@communication_bp.put("/messages/<message_id>/read")
 @token_required
 def mark_message_read(message_id):
     with get_session() as session:
@@ -182,7 +175,6 @@ def mark_message_read(message_id):
         return success(_message_to_dict(message))
 
 
-@communication_bp.post("/dossiers")
 @token_required
 @roles_required("PARENT")
 def create_dossier():
@@ -207,7 +199,6 @@ def create_dossier():
         return success(_dossier_to_dict(dossier), 201)
 
 
-@communication_bp.get("/dossiers")
 @token_required
 @roles_required("PARENT")
 def list_dossiers():
@@ -216,7 +207,6 @@ def list_dossiers():
         return success([_dossier_to_dict(d) for d in dossiers])
 
 
-@communication_bp.get("/dossiers/public/<share_token>")
 def get_public_dossier(share_token):
     with get_session() as session:
         dossier = (
@@ -280,7 +270,6 @@ def get_public_dossier(share_token):
         })
 
 
-@communication_bp.delete("/dossiers/<dossier_id>")
 @token_required
 @roles_required("PARENT")
 def delete_dossier(dossier_id):
@@ -296,7 +285,6 @@ def delete_dossier(dossier_id):
         return success({"deletedId": dossier_id, "message": "Academic dossier revoked successfully"})
 
 
-@communication_bp.get("/dossiers/preview/<student_id>")
 @token_required
 @roles_required("PARENT")
 def preview_student_dossier(student_id):
@@ -344,7 +332,6 @@ def _ptm_to_dict(ptm: PTMSchedule) -> dict:
     }
 
 
-@communication_bp.post("/ptm/schedule")
 @token_required
 @roles_required("PARENT")
 def schedule_ptm():
@@ -384,7 +371,6 @@ def schedule_ptm():
         return success(_ptm_to_dict(ptm), 201)
 
 
-@communication_bp.get("/ptm/schedules")
 @token_required
 def list_ptm_schedules():
     with get_session() as session:

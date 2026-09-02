@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from flask import Blueprint, request, g
+from flask import request, g
 
 from database.dbConnection import get_session
 from helper import diagnostic_engine, exam_generator, gamification_engine, mastery_engine, misconception_engine
@@ -15,7 +15,6 @@ from utils.response import success
 from utils.serializers import submission_to_dict
 from utils.validators import require_fields, validate_board, validate_class_grade, validate_subject, validate_difficulty
 
-exam_bp = Blueprint("exam", __name__, url_prefix="/api/v1/exams")
 
 
 def _resolve_student_for_request(session, payload: dict) -> Student:
@@ -38,7 +37,6 @@ def _reset_daily_quota_if_new_day(student: Student):
         student.daily_exams_taken_today = 0
 
 
-@exam_bp.post("/generate")
 @token_required
 def generate_exam():
     payload = request.get_json(force=True, silent=True) or {}
@@ -82,7 +80,6 @@ def generate_exam():
         )
 
 
-@exam_bp.post("/<exam_id>/submit")
 @token_required
 def submit_exam(exam_id):
     payload = request.get_json(force=True, silent=True) or {}

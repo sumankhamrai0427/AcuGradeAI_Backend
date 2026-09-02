@@ -2,7 +2,7 @@ import hashlib
 from datetime import datetime, timedelta
 
 import jwt
-from flask import Blueprint, request, g
+from flask import request, g
 from sqlalchemy import text
 
 from database.dbConnection import get_session
@@ -16,7 +16,6 @@ from utils.security import (
 )
 from utils.validators import require_fields, validate_email, validate_password_strength
 
-auth_bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
 
 
 def _hash_token(token: str) -> str:
@@ -59,7 +58,6 @@ def _get_page_access(session, role_name: str) -> list[dict]:
     ]
 
 
-@auth_bp.post("/register")
 def register():
     payload = request.get_json(force=True, silent=True) or {}
     require_fields(payload, ["name", "email", "password"])
@@ -125,7 +123,6 @@ def register():
         )
 
 
-@auth_bp.post("/login")
 def login():
     payload = request.get_json(force=True, silent=True) or {}
     require_fields(payload, ["email", "password"])
@@ -174,7 +171,6 @@ def login():
         )
 
 
-@auth_bp.get("/verify")
 @token_required
 def verify_session():
     """Validates the current session token with the database using Stored Procedure."""
@@ -210,7 +206,6 @@ def verify_session():
         )
 
 
-@auth_bp.get("/menu-permissions")
 @token_required
 def get_menu_permissions():
     """Returns dynamic page access & navigation permissions for the active role."""
@@ -225,7 +220,6 @@ def get_menu_permissions():
         )
 
 
-@auth_bp.get("/roles")
 def get_registration_roles():
     """Public endpoint to fetch active roles available for self-registration."""
     with get_session() as session:
@@ -249,7 +243,6 @@ def get_registration_roles():
 
 
 
-@auth_bp.post("/child-login")
 @token_required
 def child_login():
     """Verifies child PIN using Stored Procedure and mints a STUDENT-scoped JWT token."""
@@ -289,7 +282,6 @@ def child_login():
         )
 
 
-@auth_bp.post("/refresh")
 def refresh():
     payload = request.get_json(force=True, silent=True) or {}
     require_fields(payload, ["refreshToken"])
@@ -338,7 +330,6 @@ def refresh():
         )
 
 
-@auth_bp.post("/logout")
 @token_required
 def logout():
     payload = request.get_json(force=True, silent=True) or {}

@@ -1,4 +1,4 @@
-from flask import Blueprint, request, g
+from flask import request, g
 
 from database.dbConnection import get_session
 from helper.gamification_engine import award_xp
@@ -10,10 +10,7 @@ from utils.response import success
 from utils.serializers import badge_to_dict
 from utils.validators import require_fields
 
-gamification_bp = Blueprint("gamification", __name__, url_prefix="/api/v1/gamification")
 
-
-@gamification_bp.get("/badges")
 def list_badges():
     """Public catalog read — badge definitions aren't sensitive."""
     with get_session() as session:
@@ -21,7 +18,6 @@ def list_badges():
         return success([badge_to_dict(b) for b in badges])
 
 
-@gamification_bp.post("/award-xp")
 @token_required
 def award_xp_route():
     """Backs the frontend's Fun Zone mini-games (`onAwardXP`). The amount is
@@ -45,3 +41,4 @@ def award_xp_route():
 
         award_xp(session, student, amount, str(payload["reason"])[:190])
         return success({"xp": student.xp, "level": student.level})
+

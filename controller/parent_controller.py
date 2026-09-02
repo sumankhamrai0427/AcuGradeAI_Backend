@@ -1,6 +1,6 @@
 import uuid
 
-from flask import Blueprint, request, g
+from flask import request, g
 
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
@@ -12,7 +12,6 @@ from utils.security import hash_pin
 from utils.serializers import student_to_child_account, submission_to_dict, learning_path_node_to_dict
 from utils.validators import require_fields, validate_board, validate_class_grade, validate_pin
 
-parent_bp = Blueprint("parent", __name__, url_prefix="/api/v1/parents")
 
 
 def _badge_ids_for(session, student_id) -> list[str]:
@@ -21,7 +20,6 @@ def _badge_ids_for(session, student_id) -> list[str]:
     return [r.badge_id for r in rows]
 
 
-@parent_bp.get("/me")
 @token_required
 @roles_required("PARENT")
 def get_me():
@@ -42,7 +40,6 @@ def get_me():
         })
 
 
-@parent_bp.get("/me/children")
 @token_required
 @roles_required("PARENT")
 def list_children():
@@ -51,7 +48,6 @@ def list_children():
         return success([student_to_child_account(c, _badge_ids_for(session, c.id)) for c in children])
 
 
-@parent_bp.post("/me/children")
 @token_required
 @roles_required("PARENT")
 def add_child():
@@ -101,7 +97,6 @@ def add_child():
         return success(student_to_child_account(student, []), 201)
 
 
-@parent_bp.put("/me/children/<student_id>")
 @token_required
 @roles_required("PARENT")
 def update_child(student_id):
@@ -126,7 +121,6 @@ def update_child(student_id):
         return success(student_to_child_account(student, _badge_ids_for(session, student.id)))
 
 
-@parent_bp.delete("/me/children/<student_id>")
 @token_required
 @roles_required("PARENT")
 def delete_child(student_id):
@@ -140,7 +134,6 @@ def delete_child(student_id):
         return success({"deleted": True})
 
 
-@parent_bp.get("/me/children/<student_id>/overview")
 @token_required
 @roles_required("PARENT")
 def child_overview(student_id):
@@ -163,7 +156,6 @@ def child_overview(student_id):
         })
 
 
-@parent_bp.get("/me/children/<student_id>/learning-path")
 @token_required
 @roles_required("PARENT")
 def child_learning_path(student_id):

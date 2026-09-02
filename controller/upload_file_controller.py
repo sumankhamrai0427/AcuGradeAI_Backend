@@ -1,4 +1,4 @@
-from flask import Blueprint, request, g
+from flask import request, g
 
 from database.dbConnection import get_session
 from helper.rag_ingestion import ingest_document
@@ -8,10 +8,7 @@ from model.models import Document
 from utils.errors import ValidationError
 from utils.response import success
 
-upload_bp = Blueprint("upload", __name__, url_prefix="/api/v1/files")
 
-
-@upload_bp.post("/upload")
 @token_required
 @roles_required("ADMIN", "SUPER_ADMIN")
 def upload_file():
@@ -40,7 +37,6 @@ def upload_file():
         }, 201)
 
 
-@upload_bp.get("/<document_id>")
 @token_required
 @roles_required("ADMIN", "SUPER_ADMIN")
 def get_document_status(document_id):
@@ -52,3 +48,4 @@ def get_document_status(document_id):
             "id": document.id, "filename": document.filename, "status": document.status,
             "board": document.board, "classGrade": document.class_grade, "subject": document.subject,
         })
+
