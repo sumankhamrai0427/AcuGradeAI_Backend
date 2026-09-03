@@ -189,6 +189,102 @@ def login():
         )
 
 
+def admin_login():
+    payload = request.get_json(force=True, silent=True) or {}
+    require_fields(payload, ["email", "password"])
+
+    email = payload["email"].strip()
+
+    with get_session() as session:
+        user = None
+        try:
+            user = session.execute(
+                text("CALL sp_get_user_for_login(:email)"),
+                {"email": email}
+            ).mappings().first()
+        except Exception:
+            # Direct query fallback if stored procedure is unavailable
+            from model.models import User, Role
+            user_record = session.query(User).filter(
+                (User.email == email) | (User.name == email)
+            ).first()
+            if user_record:
+                role_record = session.query(Role).filter(Role.id == user_record.role_id).first()
+                user = {
+                    "id": user_record.id,
+                    "name": user_record.name,
+                    "email": user_record.email,
+                    "password_hash": user_record.password_hash,
+                    "role_id": user_record.role_id,
+                    "role_name": role_record.role_name if role_record else "Admin",
+                    "is_active": user_record.is_active,
+                }
+
+        if not user or not verify_password(payload["password"], user["password_hash"]):
+            raise UnauthorizedError("Invalid email or password", code="INVALID_CREDENTIALS")
+        if not user["is_active"]:
+            raise UnauthorizedError("This account is not active", code="ACCOUNT_INACTIVE")
+
+        role_name = (user["role_name"] or "").strip().upper()
+        if role_name not in ["ADMIN", "SUPER_ADMIN"]:
+            raise UnauthorizedError("Access denied. Admin credentials required.", code="FORBIDDEN_ROLE")
+
+        tokens = _issue_tokens(session, user["id"], user["role_name"])
+        try:
+            page_access = _get_page_access(session, user["role_name"])
+        except Exception:
+            page_access = []
+        session.commit()
+
+        return success(
+            {
+                "tokens": {
+                    "accessToken": tokens["accessToken"],
+                    "refreshToken": tokens["refreshToken"],
+                    "tokenType": "Bearer",
+                    "expiresIn": config.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+                },
+                "accessToken": tokens["accessToken"],
+                "refreshToken": tokens["refreshToken"],
+                "user": {
+                    "id": user["id"],
+                    "name": user["name"],
+                    "email": user["email"],
+                    "roleId": user["role_id"],
+                    "roleName": user["role_name"],
+                    "role": user["role_name"],
+                    "isActive": user["is_active"],
+                },
+                "pageAccess": page_access,
+            },
+            status_code=200,
+            message="Admin login successful",
+        )
+
+
+def admin_reset_password():
+    payload = request.get_json(force=True, silent=True) or {}
+    require_fields(payload, ["email", "newPassword"])
+
+    email = payload["email"].strip()
+    new_password = payload["newPassword"]
+
+    with get_session() as session:
+        from model.models import User
+        user = session.query(User).filter((User.email == email) | (User.name == email)).first()
+        if not user:
+            raise AppError("NOT_FOUND", "Admin account not found", 404)
+
+        if user.role_id != 4:
+            raise UnauthorizedError("Password reset only available for admin accounts here", code="FORBIDDEN_ROLE")
+
+        user.password_hash = hash_password(new_password)
+        user.updated_at = datetime.utcnow()
+        session.commit()
+
+        return success({"reset": True}, message="Password updated successfully")
+
+
 def google_auth():
     """Authenticates or registers a user via Google OAuth ID Token or Access Token."""
     payload = request.get_json(force=True, silent=True) or {}

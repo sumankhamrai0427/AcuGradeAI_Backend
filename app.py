@@ -303,6 +303,14 @@ def create_app() -> Flask:
     # ============================================================
     # 11. Admin Endpoints
     # ============================================================
+    @app.route("/api/v1/admin/login", methods=["POST"])
+    def api_admin_login():
+        return auth_controller.admin_login()
+
+    @app.route("/api/v1/admin/reset-password", methods=["POST"])
+    def api_admin_reset_password():
+        return auth_controller.admin_reset_password()
+
     @app.route("/api/v1/admin/statistics", methods=["GET"])
     def api_admin_statistics():
         return admin_controller.statistics()
