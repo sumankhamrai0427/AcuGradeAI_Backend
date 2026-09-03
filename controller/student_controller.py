@@ -12,6 +12,46 @@ from utils.serializers import student_to_child_account, submission_to_dict, lear
 
 @token_required
 @roles_required("STUDENT")
+def get_dashboard():
+    """Consolidated Student Dashboard API:
+    Returns Student Profile, Topic Mastery, Recent Exams, Learning Path, and Menu Permissions in ONE call.
+    """
+    with get_session() as session:
+        student = session.get(Student, g.current_user_id)
+        if not student:
+            raise NotFoundError("Student not found")
+
+        from controller.auth_controller import get_page_access_for_role
+
+        badge_ids = [r.badge_id for r in session.query(StudentBadge).filter(StudentBadge.student_id == student.id).all()]
+        child_account = student_to_child_account(student, badge_ids)
+        child_account["topicMastery"] = get_topic_mastery_map(session, student.id)
+
+        recent = (
+            session.query(ExamSubmission)
+            .filter(ExamSubmission.student_id == student.id)
+            .order_by(ExamSubmission.submitted_at.desc())
+            .limit(10)
+            .all()
+        )
+        recent_exams = [submission_to_dict(s) for s in recent]
+
+        nodes = session.query(LearningPathNode).filter(LearningPathNode.student_id == student.id).all()
+        learning_nodes = [learning_path_node_to_dict(n) for n in nodes]
+
+        page_access = get_page_access_for_role(session, "STUDENT")
+
+        return success({
+            "profile": child_account,
+            "recentExams": recent_exams,
+            "topicMastery": child_account["topicMastery"],
+            "learningPath": learning_nodes,
+            "pageAccess": page_access,
+        })
+
+
+@token_required
+@roles_required("STUDENT")
 def get_me():
     with get_session() as session:
         student = session.get(Student, g.current_user_id)

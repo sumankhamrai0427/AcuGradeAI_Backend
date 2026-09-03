@@ -22,6 +22,78 @@ def _badge_ids_for(session, student_id) -> list[str]:
 
 @token_required
 @roles_required("PARENT")
+def get_dashboard():
+    """Consolidated Parent Dashboard API:
+    Returns Parent Profile, Subscription, Enriched Children (with Mastery & Recent Exams),
+    Page Access (Menu Permissions), and Stats in ONE single round trip.
+    """
+    with get_session() as session:
+        user = session.get(User, g.current_user_id)
+        if not user:
+            raise NotFoundError("User account not found")
+        parent = session.get(Parent, g.current_user_id)
+        if not parent:
+            parent = Parent(id=user.id, subscription_tier="free")
+            session.add(parent)
+            session.flush()
+
+        from controller.auth_controller import get_page_access_for_role
+        from helper.mastery_engine import get_topic_mastery_map
+
+        # 1. Fetch children
+        children_records = session.query(Student).filter(Student.parent_id == g.current_user_id).all()
+        enriched_children = []
+        all_recent_exams = []
+        total_family_xp = 0
+
+        for child in children_records:
+            total_family_xp += (child.xp or 0)
+            badge_ids = _badge_ids_for(session, child.id)
+            child_dict = student_to_child_account(child, badge_ids)
+            child_dict["topicMastery"] = get_topic_mastery_map(session, child.id)
+
+            # Fetch recent exams for this child
+            child_exams = (
+                session.query(ExamSubmission)
+                .filter(ExamSubmission.student_id == child.id)
+                .order_by(ExamSubmission.submitted_at.desc())
+                .limit(10)
+                .all()
+            )
+            child_dict["recentExams"] = [submission_to_dict(s) for s in child_exams]
+            all_recent_exams.extend(child_dict["recentExams"])
+            enriched_children.append(child_dict)
+
+        # Sort all exams descending by submission timestamp
+        all_recent_exams.sort(key=lambda x: x.get("submittedAt") or "", reverse=True)
+
+        # 2. Get Menu Permissions for PARENT role
+        page_access = get_page_access_for_role(session, "PARENT")
+
+        profile = {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": "parent",
+            "subscriptionTier": parent.subscription_tier,
+            "subscriptionExpiry": parent.subscription_expiry.isoformat() if parent.subscription_expiry else None,
+            "createdAt": user.created_at.isoformat() if user.created_at else None,
+        }
+
+        return success({
+            "profile": profile,
+            "children": enriched_children,
+            "recentExams": all_recent_exams,
+            "pageAccess": page_access,
+            "stats": {
+                "totalChildren": len(enriched_children),
+                "totalFamilyXP": total_family_xp,
+            }
+        })
+
+
+@token_required
+@roles_required("PARENT")
 def get_me():
     with get_session() as session:
         user = session.get(User, g.current_user_id)

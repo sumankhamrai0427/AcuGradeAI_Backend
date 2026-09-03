@@ -44,7 +44,7 @@ def _issue_tokens(session, user_id: int, role_name: str) -> dict:
     return {"accessToken": access_token, "refreshToken": refresh_token}
 
 
-def _get_page_access(session, role_name: str) -> list[dict]:
+def get_page_access_for_role(session, role_name: str) -> list[dict]:
     rows = session.execute(
         text("CALL sp_get_role_menu_permissions(:role_name)"),
         {"role_name": role_name}
@@ -61,6 +61,9 @@ def _get_page_access(session, role_name: str) -> list[dict]:
         }
         for r in rows
     ]
+
+
+_get_page_access = get_page_access_for_role
 
 
 def register():

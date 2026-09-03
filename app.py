@@ -113,6 +113,11 @@ def create_app() -> Flask:
     # ============================================================
     # 3. Parent Endpoints
     # ============================================================
+    @app.route("/api/v1/parent/dashboard", methods=["GET"])
+    @app.route("/api/v1/parents/dashboard", methods=["GET"])
+    def api_parent_dashboard():
+        return parent_controller.get_dashboard()
+
     @app.route("/api/v1/parents/me", methods=["GET"])
     def api_parent_get_me():
         return parent_controller.get_me()
@@ -144,6 +149,11 @@ def create_app() -> Flask:
     # ============================================================
     # 4. Student Endpoints
     # ============================================================
+    @app.route("/api/v1/student/dashboard", methods=["GET"])
+    @app.route("/api/v1/students/dashboard", methods=["GET"])
+    def api_student_dashboard():
+        return student_controller.get_dashboard()
+
     @app.route("/api/v1/students/me", methods=["GET"])
     def api_student_get_me():
         return student_controller.get_me()
