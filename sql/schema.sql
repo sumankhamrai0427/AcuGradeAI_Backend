@@ -38,14 +38,17 @@ CREATE TABLE IF NOT EXISTS users (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   name          VARCHAR(150) NOT NULL,
   email         VARCHAR(190) NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255) NULL,
   role_id       INT          NOT NULL,
+  auth_provider ENUM('EMAIL', 'GOOGLE') NOT NULL DEFAULT 'EMAIL',
+  google_id     VARCHAR(100) NULL,
   is_active     TINYINT(1)   NOT NULL DEFAULT 1,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_by    INT          NULL,
   updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   updated_by    INT          NULL,
   UNIQUE KEY uq_users_email (email),
+  UNIQUE KEY uq_users_google_id (google_id),
   CONSTRAINT fk_users_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT,
   KEY idx_users_role_id (role_id)
 ) ENGINE=InnoDB;
@@ -448,6 +451,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- 11. STORED PROCEDURES
 -- ============================================================
 DROP PROCEDURE IF EXISTS sp_register_parent;
+DROP PROCEDURE IF EXISTS sp_google_login_or_register;
 DROP PROCEDURE IF EXISTS sp_get_user_for_login;
 DROP PROCEDURE IF EXISTS sp_verify_user_session;
 DROP PROCEDURE IF EXISTS sp_get_child_for_login;
@@ -478,8 +482,8 @@ BEGIN
             SELECT id INTO v_role_id FROM roles WHERE UPPER(role_name) = 'PARENT' LIMIT 1;
         END IF;
 
-        INSERT INTO users (name, email, password_hash, role_id, is_active, created_at, updated_at)
-        VALUES (p_name, p_email, p_password_hash, v_role_id, 1, NOW(), NOW());
+        INSERT INTO users (name, email, password_hash, role_id, auth_provider, is_active, created_at, updated_at)
+        VALUES (p_name, p_email, p_password_hash, v_role_id, 'EMAIL', 1, NOW(), NOW());
 
         SET v_user_id = LAST_INSERT_ID();
         
@@ -490,7 +494,7 @@ BEGIN
             INSERT INTO parents (id, subscription_tier) VALUES (v_user_id, 'free');
         END IF;
 
-        SELECT u.id, u.name, u.email, u.role_id, r.role_name, IFNULL(p.subscription_tier, 'free') AS subscription_tier, u.is_active, u.created_at
+        SELECT u.id, u.name, u.email, u.role_id, r.role_name, IFNULL(p.subscription_tier, 'free') AS subscription_tier, u.is_active, u.created_at, u.auth_provider, u.google_id
         FROM users u
         JOIN roles r ON u.role_id = r.id
         LEFT JOIN parents p ON u.id = p.id
@@ -498,11 +502,54 @@ BEGIN
     END IF;
 END //
 
+CREATE PROCEDURE sp_google_login_or_register(
+    IN p_name VARCHAR(150),
+    IN p_email VARCHAR(190),
+    IN p_google_id VARCHAR(100),
+    IN p_role_name VARCHAR(50)
+)
+BEGIN
+    DECLARE v_user_id INT;
+    DECLARE v_role_id INT;
+
+    SELECT id INTO v_user_id FROM users WHERE email = p_email OR (p_google_id IS NOT NULL AND google_id = p_google_id) LIMIT 1;
+
+    IF v_user_id IS NOT NULL THEN
+        UPDATE users 
+        SET google_id = IFNULL(google_id, p_google_id),
+            updated_at = NOW()
+        WHERE id = v_user_id;
+    ELSE
+        SELECT id INTO v_role_id FROM roles WHERE UPPER(role_name) = UPPER(p_role_name) LIMIT 1;
+        IF v_role_id IS NULL THEN
+            SELECT id INTO v_role_id FROM roles WHERE UPPER(role_name) = 'PARENT' LIMIT 1;
+        END IF;
+
+        INSERT INTO users (name, email, password_hash, role_id, auth_provider, google_id, is_active, created_at, updated_at)
+        VALUES (p_name, p_email, NULL, v_role_id, 'GOOGLE', p_google_id, 1, NOW(), NOW());
+
+        SET v_user_id = LAST_INSERT_ID();
+
+        IF UPPER(p_role_name) = 'TEACHER' THEN
+            INSERT INTO teachers (id, role_title, subject, school_name, verified)
+            VALUES (v_user_id, 'Subject Teacher', 'General', 'Partner School', 1);
+        ELSE
+            INSERT INTO parents (id, subscription_tier) VALUES (v_user_id, 'free');
+        END IF;
+    END IF;
+
+    SELECT u.id, u.name, u.email, u.role_id, r.role_name, IFNULL(p.subscription_tier, 'free') AS subscription_tier, u.is_active, u.created_at, u.auth_provider, u.google_id
+    FROM users u
+    JOIN roles r ON u.role_id = r.id
+    LEFT JOIN parents p ON u.id = p.id
+    WHERE u.id = v_user_id;
+END //
+
 CREATE PROCEDURE sp_get_user_for_login(
     IN p_identifier VARCHAR(190)
 )
 BEGIN
-    SELECT u.id, u.name, u.email, u.password_hash, u.role_id, r.role_name, u.is_active, p.subscription_tier
+    SELECT u.id, u.name, u.email, u.password_hash, u.auth_provider, u.google_id, u.role_id, r.role_name, u.is_active, p.subscription_tier
     FROM users u
     JOIN roles r ON u.role_id = r.id
     LEFT JOIN parents p ON u.id = p.id

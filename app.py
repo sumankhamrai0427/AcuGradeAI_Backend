@@ -82,6 +82,10 @@ def create_app() -> Flask:
     def api_auth_login():
         return auth_controller.login()
 
+    @app.route("/api/v1/auth/google", methods=["POST"])
+    def api_auth_google():
+        return auth_controller.google_auth()
+
     @app.route("/api/v1/auth/verify", methods=["GET"])
     def api_auth_verify():
         return auth_controller.verify_session()

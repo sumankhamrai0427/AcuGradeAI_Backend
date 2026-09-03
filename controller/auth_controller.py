@@ -16,6 +16,11 @@ from utils.security import (
 )
 from utils.validators import require_fields, validate_email, validate_password_strength
 
+# pyrefly: ignore [missing-import]
+from google.oauth2 import id_token as google_id_token
+# pyrefly: ignore [missing-import]
+from google.auth.transport import requests as google_requests
+
 
 
 def _hash_token(token: str) -> str:
@@ -135,7 +140,16 @@ def login():
             {"email": email}
         ).mappings().first()
 
-        if not user or not verify_password(payload["password"], user["password_hash"]):
+        if not user:
+            raise UnauthorizedError("Invalid email or password", code="INVALID_CREDENTIALS")
+        
+        if not user["password_hash"]:
+            raise UnauthorizedError(
+                "This account was registered with Google. Please use 'Continue with Google' to sign in.",
+                code="GOOGLE_AUTH_REQUIRED"
+            )
+
+        if not verify_password(payload["password"], user["password_hash"]):
             raise UnauthorizedError("Invalid email or password", code="INVALID_CREDENTIALS")
         if not user["is_active"]:
             raise UnauthorizedError("This account is not active", code="ACCOUNT_INACTIVE")
@@ -161,6 +175,7 @@ def login():
                     "roleId": user["role_id"],
                     "roleName": user["role_name"],
                     "role": user["role_name"],
+                    "authProvider": user.get("auth_provider", "EMAIL"),
                     "subscriptionTier": user.get("subscription_tier", "free"),
                     "isActive": user["is_active"],
                 },
@@ -168,6 +183,111 @@ def login():
             },
             status_code=200,
             message="Login successful",
+        )
+
+
+def google_auth():
+    """Authenticates or registers a user via Google OAuth ID Token or Access Token."""
+    payload = request.get_json(force=True, silent=True) or {}
+    token = payload.get("credential") or payload.get("token") or payload.get("idToken") or payload.get("accessToken")
+    if not token:
+        raise AppError("MISSING_TOKEN", "Google credential token is required", 400)
+
+    email = None
+    name = None
+    google_id = None
+
+    token_str = str(token).strip()
+
+    if token_str.count('.') == 2:
+        # JWT ID Token flow
+        try:
+            audience = config.GOOGLE_CLIENT_ID if config.GOOGLE_CLIENT_ID else None
+            id_info = google_id_token.verify_oauth2_token(
+                token_str,
+                google_requests.Request(),
+                audience=audience,
+                clock_skew_in_seconds=10
+            )
+            email = id_info.get("email")
+            google_id = id_info.get("sub")
+            name = id_info.get("name")
+        except Exception as e:
+            raise UnauthorizedError(f"Invalid Google ID token: {str(e)}", code="INVALID_GOOGLE_TOKEN")
+    else:
+        # OAuth2 Access Token flow
+        import requests
+        try:
+            res = requests.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {token_str}"},
+                timeout=10
+            )
+            if res.status_code != 200:
+                raise UnauthorizedError("Failed to verify Google access token", code="INVALID_GOOGLE_TOKEN")
+            user_data = res.json()
+            email = user_data.get("email")
+            google_id = user_data.get("sub")
+            name = user_data.get("name")
+        except Exception as e:
+            raise UnauthorizedError(f"Google authentication error: {str(e)}", code="INVALID_GOOGLE_TOKEN")
+
+    if not email:
+        raise AppError("INVALID_TOKEN", "Google account did not provide a verified email", 400)
+
+    name = name or email.split("@")[0]
+    requested_role = str(payload.get("role", "PARENT")).strip().upper()
+    role_name = "TEACHER" if requested_role == "TEACHER" else "PARENT"
+
+    with get_session() as session:
+        result = session.execute(
+            text("CALL sp_google_login_or_register(:name, :email, :google_id, :role_name)"),
+            {
+                "name": name.strip(),
+                "email": email.strip().lower(),
+                "google_id": google_id,
+                "role_name": role_name,
+            }
+        ).mappings().first()
+
+        if not result:
+            raise AppError("AUTH_FAILED", "Failed to authenticate user with Google", 500)
+        if not result["is_active"]:
+            raise UnauthorizedError("This account is not active", code="ACCOUNT_INACTIVE")
+
+        tokens = _issue_tokens(session, result["id"], result["role_name"])
+        page_access = _get_page_access(session, result["role_name"])
+        session.commit()
+
+        created_at_val = result.get("created_at")
+        created_at_str = created_at_val.isoformat() if hasattr(created_at_val, "isoformat") else str(created_at_val)
+
+        return success(
+            {
+                "tokens": {
+                    "accessToken": tokens["accessToken"],
+                    "refreshToken": tokens["refreshToken"],
+                    "tokenType": "Bearer",
+                    "expiresIn": config.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+                },
+                "accessToken": tokens["accessToken"],
+                "refreshToken": tokens["refreshToken"],
+                "user": {
+                    "id": result["id"],
+                    "name": result["name"],
+                    "email": result["email"],
+                    "roleId": result["role_id"],
+                    "roleName": result["role_name"],
+                    "role": result["role_name"],
+                    "authProvider": result.get("auth_provider", "GOOGLE"),
+                    "subscriptionTier": result.get("subscription_tier", "free"),
+                    "isActive": result["is_active"],
+                    "createdAt": created_at_str,
+                },
+                "pageAccess": page_access,
+            },
+            status_code=200,
+            message="Google login successful",
         )
 
 

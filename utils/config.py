@@ -17,6 +17,7 @@ class Config:
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     JWT_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
     MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
     MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
