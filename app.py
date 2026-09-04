@@ -111,6 +111,14 @@ def create_app() -> Flask:
         return auth_controller.logout()
 
     # ============================================================
+    # ============================================================
+    # 2.5 Master Data Endpoints
+    # ============================================================
+    @app.route("/api/v1/master/child-registration-options", methods=["GET"])
+    def api_master_child_registration_options():
+        return parent_controller.get_child_registration_options()
+
+    # ============================================================
     # 3. Parent Endpoints
     # ============================================================
     @app.route("/api/v1/parent/dashboard", methods=["GET"])
@@ -126,6 +134,7 @@ def create_app() -> Flask:
     def api_parent_list_children():
         return parent_controller.list_children()
 
+    @app.route("/api/v1/parents/add-child", methods=["POST"])
     @app.route("/api/v1/parents/me/children", methods=["POST"])
     def api_parent_add_child():
         return parent_controller.add_child()

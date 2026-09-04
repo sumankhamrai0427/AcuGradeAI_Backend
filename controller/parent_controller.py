@@ -1,6 +1,8 @@
+import json
 import uuid
 
 from flask import request, g
+from sqlalchemy import text
 
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
@@ -8,11 +10,45 @@ from middleware.roleMiddleware import roles_required, assert_owns_student
 from model.models import Parent, Student, User, Role, ExamSubmission, LearningPathNode, StudentBadge, SubscriptionPlan
 from utils.errors import AppError, NotFoundError
 from utils.response import success
-from utils.security import hash_pin
+from utils.security import hash_pin, hash_password
 from utils.serializers import student_to_child_account, submission_to_dict, learning_path_node_to_dict
 from utils.validators import require_fields, validate_board, validate_class_grade, validate_pin
 
 
+def get_child_registration_options():
+    """Fetches active boards and class grades directly from DB via Stored Procedure."""
+    with get_session() as session:
+        result = session.execute(
+            text("CALL sp_get_child_registration_masters()")
+        ).mappings().first()
+
+        boards_data = []
+        classes_data = []
+
+        if result:
+            raw_boards = result.get("boards")
+            raw_classes = result.get("classes")
+
+            if isinstance(raw_boards, str):
+                try:
+                    boards_data = json.loads(raw_boards)
+                except Exception:
+                    boards_data = []
+            elif isinstance(raw_boards, list):
+                boards_data = raw_boards
+
+            if isinstance(raw_classes, str):
+                try:
+                    classes_data = json.loads(raw_classes)
+                except Exception:
+                    classes_data = []
+            elif isinstance(raw_classes, list):
+                classes_data = raw_classes
+
+        return success({
+            "boards": boards_data or [],
+            "classes": classes_data or [],
+        })
 
 def _badge_ids_for(session, student_id) -> list[str]:
     s_id = int(student_id) if str(student_id).isdigit() else student_id
@@ -123,50 +159,74 @@ def list_children():
 @token_required
 @roles_required("PARENT")
 def add_child():
+    """Adds a child sub-account using Stored Procedure sp_add_child_account."""
     payload = request.get_json(force=True, silent=True) or {}
-    require_fields(payload, ["name", "classGrade", "targetBoard", "pin"])
-    validate_class_grade(payload["classGrade"])
-    validate_board(payload["targetBoard"])
-    validate_pin(payload["pin"])
-
+    require_fields(payload, ["name", "classGrade", "targetBoard"])
+    
+    password = str(payload.get("password") or payload.get("pin") or "1234").strip()
+    if not password:
+        raise AppError("VALIDATION_ERROR", "Password or PIN is required", 400)
+    
+    password_hash = hash_password(password)
+    
     with get_session() as session:
-        parent = session.get(Parent, g.current_user_id)
-        plan = session.get(SubscriptionPlan, parent.subscription_tier)
-        current_count = session.query(Student).filter(Student.parent_id == parent.id).count()
-        if plan and plan.max_children != "unlimited" and current_count >= int(plan.max_children):
-            raise AppError(
-                "CHILD_LIMIT_REACHED",
-                f"Your {parent.subscription_tier} plan allows up to {plan.max_children} children",
-                403,
-            )
+        try:
+            result = session.execute(
+                text("""
+                    CALL sp_add_child_account(
+                        :parent_id,
+                        :name,
+                        :email,
+                        :password_hash,
+                        :class_grade,
+                        :target_board,
+                        :school_name,
+                        :avatar
+                    )
+                """),
+                {
+                    "parent_id": g.current_user_id,
+                    "name": payload["name"].strip(),
+                    "email": payload.get("email", "").strip() or None,
+                    "password_hash": password_hash,
+                    "class_grade": payload["classGrade"].strip(),
+                    "target_board": payload["targetBoard"].strip(),
+                    "school_name": payload.get("schoolName", "").strip() or None,
+                    "avatar": payload.get("avatar", "👦"),
+                }
+            ).mappings().first()
+            session.commit()
+        except Exception as e:
+            if "CHILD_LIMIT_REACHED" in str(e):
+                raise AppError("CHILD_LIMIT_REACHED", "Your subscription plan child limit has been reached", 403)
+            raise
+        
+        if not result:
+            raise AppError("CHILD_CREATION_FAILED", "Failed to create child account", 500)
+        
+        created_at_val = result.get("created_at")
+        created_at_str = created_at_val.isoformat() if hasattr(created_at_val, "isoformat") else str(created_at_val)
 
-        role_record = session.query(Role).filter(Role.role_name == "STUDENT").first()
-        student_role_id = role_record.id if role_record else 1
-
-        user = User(
-            name=payload["name"],
-            email=f"child+{uuid.uuid4()}@acugrade.local",
-            password_hash=hash_pin(payload["pin"]),
-            role_id=student_role_id,
-            is_active=True,
-        )
-        session.add(user)
-        session.flush()
-
-        student = Student(
-            id=user.id,
-            parent_id=parent.id,
-            avatar=payload.get("avatar", "🧑‍🎓"),
-            class_grade=payload["classGrade"],
-            target_board=payload["targetBoard"],
-            school_name=payload.get("schoolName"),
-            pin_hash=hash_pin(payload["pin"]),
-            xp=250,
-            level=1,
-        )
-        session.add(student)
-        session.flush()
-        return success(student_to_child_account(student, []), 201)
+        return success({
+            "id": str(result["id"]),
+            "name": result["name"],
+            "email": result["email"],
+            "parentId": str(result["parent_id"]),
+            "avatar": result["avatar"],
+            "classGrade": result["class_grade"],
+            "targetBoard": result["target_board"],
+            "schoolName": result["school_name"],
+            "pin": password if len(password) == 4 and password.isdigit() else "••••",
+            "dailyExamsTakenToday": result["daily_exams_taken_today"],
+            "totalExamsTaken": result["total_exams_taken"],
+            "averageScore": float(result["average_score"] or 0),
+            "streakDays": result["streak_days"],
+            "xp": result["xp"],
+            "level": result["level"],
+            "badges": [],
+            "topicMastery": {},
+            "createdAt": created_at_str,
+        }, 201)
 
 
 @token_required

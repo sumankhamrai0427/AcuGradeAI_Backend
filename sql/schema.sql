@@ -617,7 +617,192 @@ CREATE PROCEDURE sp_revoke_refresh_token(
     IN p_token_hash VARCHAR(255)
 )
 BEGIN
-    UPDATE refresh_tokens SET revoked = 1 WHERE token_hash = p_token_hash;
+-- ------------------------------------------------------------
+-- 11. CURRICULUM & QUESTION MASTER TABLES
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS board_master (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  board_name  VARCHAR(100) NOT NULL,
+  description TEXT NULL,
+  is_active   TINYINT(1) DEFAULT 1,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS class_master (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  class_name  VARCHAR(100) NOT NULL,
+  is_active   TINYINT(1) DEFAULT 1,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS subject_master (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  board_id     INT NOT NULL,
+  class_id     INT NOT NULL,
+  subject_name VARCHAR(100) NOT NULL,
+  is_active    TINYINT(1) DEFAULT 1,
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_subject_board FOREIGN KEY (board_id) REFERENCES board_master (id) ON DELETE CASCADE,
+  CONSTRAINT fk_subject_class FOREIGN KEY (class_id) REFERENCES class_master (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS chapter_master (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  subject_id   INT NOT NULL,
+  chapter_name VARCHAR(255) NOT NULL,
+  is_active    TINYINT(1) DEFAULT 1,
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_chapter_subject FOREIGN KEY (subject_id) REFERENCES subject_master (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS topic_master (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  chapter_id  INT NOT NULL,
+  topic_name  VARCHAR(255) NOT NULL,
+  is_active   TINYINT(1) DEFAULT 1,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_topic_chapter FOREIGN KEY (chapter_id) REFERENCES chapter_master (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS difficulty_level_master (
+  id                    INT AUTO_INCREMENT PRIMARY KEY,
+  difficulty_level_name VARCHAR(100) NOT NULL,
+  is_active             TINYINT(1) DEFAULT 1,
+  created_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS question_type_master (
+  id                 INT AUTO_INCREMENT PRIMARY KEY,
+  question_type_name VARCHAR(100) NOT NULL,
+  default_marks      INT NOT NULL DEFAULT 1,
+  is_active          TINYINT(1) DEFAULT 1,
+  created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at         DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS question_master (
+  id                  INT AUTO_INCREMENT PRIMARY KEY,
+  topic_id            INT NOT NULL,
+  question_type_id    INT NOT NULL,
+  difficulty_level_id INT NOT NULL,
+  question            TEXT NOT NULL,
+  options             JSON DEFAULT NULL,
+  correct_answer      VARCHAR(500) NOT NULL,
+  explanation         TEXT NULL,
+  marks               INT NOT NULL DEFAULT 1,
+  is_active           TINYINT(1) DEFAULT 1,
+  created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_question_topic FOREIGN KEY (topic_id) REFERENCES topic_master (id) ON DELETE CASCADE,
+  CONSTRAINT fk_question_type FOREIGN KEY (question_type_id) REFERENCES question_type_master (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_question_difficulty FOREIGN KEY (difficulty_level_id) REFERENCES difficulty_level_master (id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- 12. STORED PROCEDURES
+-- ------------------------------------------------------------
+DROP PROCEDURE IF EXISTS sp_register_parent;
+DROP PROCEDURE IF EXISTS sp_google_login_or_register;
+DROP PROCEDURE IF EXISTS sp_get_user_for_login;
+DROP PROCEDURE IF EXISTS sp_verify_user_session;
+DROP PROCEDURE IF EXISTS sp_get_child_for_login;
+DROP PROCEDURE IF EXISTS sp_save_refresh_token;
+DROP PROCEDURE IF EXISTS sp_validate_and_rotate_refresh_token;
+DROP PROCEDURE IF EXISTS sp_revoke_refresh_token;
+DROP PROCEDURE IF EXISTS sp_get_role_menu_permissions;
+DROP PROCEDURE IF EXISTS sp_get_registration_roles;
+DROP PROCEDURE IF EXISTS sp_get_child_registration_masters;
+DROP PROCEDURE IF EXISTS sp_add_child_account;
+
+DELIMITER //
+
+CREATE PROCEDURE sp_get_child_registration_masters()
+BEGIN
+    SELECT 
+        (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', id, 'name', board_name, 'description', description)) FROM board_master WHERE is_active = 1) AS boards,
+        (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', id, 'name', class_name)) FROM class_master WHERE is_active = 1) AS classes;
+END //
+
+CREATE PROCEDURE sp_add_child_account(
+    IN p_parent_id INT,
+    IN p_name VARCHAR(150),
+    IN p_email VARCHAR(190),
+    IN p_password_hash VARCHAR(255),
+    IN p_class_grade VARCHAR(20),
+    IN p_target_board VARCHAR(20),
+    IN p_school_name VARCHAR(190),
+    IN p_avatar VARCHAR(20)
+)
+BEGIN
+    DECLARE v_student_user_id INT;
+    DECLARE v_student_role_id INT;
+    DECLARE v_current_children_count INT;
+    DECLARE v_subscription_tier VARCHAR(30);
+    DECLARE v_max_children VARCHAR(20);
+    DECLARE v_final_email VARCHAR(190);
+
+    SELECT IFNULL(subscription_tier, 'free') INTO v_subscription_tier 
+    FROM parents WHERE id = p_parent_id LIMIT 1;
+
+    SELECT max_children INTO v_max_children 
+    FROM subscription_plans WHERE id = v_subscription_tier LIMIT 1;
+
+    SELECT COUNT(*) INTO v_current_children_count 
+    FROM students WHERE parent_id = p_parent_id;
+
+    IF v_max_children IS NOT NULL AND v_max_children != 'unlimited' AND v_current_children_count >= CAST(v_max_children AS SIGNED) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CHILD_LIMIT_REACHED';
+    END IF;
+
+    SELECT id INTO v_student_role_id FROM roles WHERE UPPER(role_name) = 'STUDENT' LIMIT 1;
+    IF v_student_role_id IS NULL THEN
+        SET v_student_role_id = 1;
+    END IF;
+
+    SET v_final_email = TRIM(p_email);
+    IF v_final_email IS NULL OR v_final_email = '' THEN
+        SELECT email INTO v_final_email FROM users WHERE id = p_parent_id LIMIT 1;
+    END IF;
+
+    INSERT INTO users (name, email, password_hash, role_id, auth_provider, is_active, created_at, updated_at)
+    VALUES (p_name, v_final_email, p_password_hash, v_student_role_id, 'EMAIL', 1, NOW(), NOW());
+
+    SET v_student_user_id = LAST_INSERT_ID();
+
+    INSERT INTO students (
+        id, parent_id, avatar, class_grade, target_board, school_name, pin_hash, 
+        daily_exams_taken_today, total_exams_taken, average_score, streak_days, xp, level, created_at, updated_at
+    )
+    VALUES (
+        v_student_user_id, p_parent_id, IFNULL(p_avatar, '👦'), p_class_grade, p_target_board, p_school_name, p_password_hash,
+        0, 0, 0.00, 0, 250, 1, NOW(), NOW()
+    );
+
+    SELECT 
+        s.id, 
+        u.name, 
+        u.email, 
+        s.parent_id, 
+        s.avatar, 
+        s.class_grade, 
+        s.target_board, 
+        s.school_name, 
+        s.daily_exams_taken_today, 
+        s.total_exams_taken, 
+        s.average_score, 
+        s.streak_days, 
+        s.xp, 
+        s.level, 
+        s.created_at
+    FROM students s
+    JOIN users u ON s.id = u.id
+    WHERE s.id = v_student_user_id;
 END //
 
 CREATE PROCEDURE sp_get_role_menu_permissions(

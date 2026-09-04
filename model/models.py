@@ -496,3 +496,28 @@ class AuditLog(Base):
     entity_id = Column(String(60), nullable=True)
     ip_address = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ------------------------------------------------------------
+# 11. Master Tables
+# ------------------------------------------------------------
+class BoardMaster(Base):
+    __tablename__ = "board_master"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    board_name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ClassMaster(Base):
+    __tablename__ = "class_master"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    class_name = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
