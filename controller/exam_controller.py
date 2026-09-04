@@ -114,7 +114,7 @@ def generate_quick_test():
             raise NotFoundError("No diagnostic questions found in database for this student")
 
         primary_subject = sp_rows[0].get("subject_name") or "General Assessment"
-        title = f"{student.class_grade} {student.target_board} Quick Diagnostic Test"
+        title = f"{student.class_grade} {student.target_board} Quick Diagnostic Assessment (15 Marks)"
 
         from model.models import Question
         exam = Exam(

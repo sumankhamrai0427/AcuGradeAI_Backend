@@ -852,7 +852,6 @@ BEGIN
     DECLARE v_class_grade VARCHAR(50);
     DECLARE v_board_id INT;
     DECLARE v_class_id INT;
-    DECLARE v_count INT DEFAULT 0;
 
     -- 1. Fetch student info
     SELECT target_board, class_grade INTO v_target_board, v_class_grade
@@ -863,27 +862,16 @@ BEGIN
     SELECT id INTO v_board_id FROM board_master WHERE LOWER(board_name) = LOWER(v_target_board) LIMIT 1;
     SELECT id INTO v_class_id FROM class_master WHERE LOWER(class_name) = LOWER(v_class_grade) LIMIT 1;
 
-    -- Level 1: If questions match exact board & class, check count
-    IF v_board_id IS NOT NULL AND v_class_id IS NOT NULL THEN
-        SELECT COUNT(*) INTO v_count
-        FROM question_master q
-        JOIN topic_master t ON q.topic_id = t.id
-        JOIN chapter_master ch ON t.chapter_id = ch.id
-        JOIN subject_master s ON ch.subject_id = s.id
-        WHERE q.is_active = 1
-          AND s.board_id = v_board_id
-          AND s.class_id = v_class_id;
-    END IF;
-
-    IF v_count >= p_limit THEN
+    -- Select 5 one-mark questions (MCQ/Objective) + 5 two-mark questions (SAQ) = 10 questions, 15 marks
+    (
         SELECT 
             q.id AS question_id,
             q.question AS question_text,
             q.options,
             q.correct_answer,
             q.explanation,
-            q.marks,
-            COALESCE(qt.question_type_name, 'mcq') AS question_type,
+            1 AS marks,
+            COALESCE(qt.question_type_name, 'MCQ') AS question_type,
             COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
             s.subject_name,
             ch.chapter_name,
@@ -899,43 +887,50 @@ BEGIN
         LEFT JOIN question_type_master qt ON q.question_type_id = qt.id
         LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
         WHERE q.is_active = 1
-          AND s.board_id = v_board_id
-          AND s.class_id = v_class_id
-        ORDER BY RAND()
-        LIMIT p_limit;
-    ELSE
-        -- Fallback: return active questions prioritized by matching class or board, then random
-        SELECT 
-            q.id AS question_id,
-            q.question AS question_text,
-            q.options,
-            q.correct_answer,
-            q.explanation,
-            q.marks,
-            COALESCE(qt.question_type_name, 'mcq') AS question_type,
-            COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
-            s.subject_name,
-            ch.chapter_name,
-            t.topic_name,
-            b.board_name,
-            c.class_name
-        FROM question_master q
-        JOIN topic_master t ON q.topic_id = t.id
-        JOIN chapter_master ch ON t.chapter_id = ch.id
-        JOIN subject_master s ON ch.subject_id = s.id
-        JOIN board_master b ON s.board_id = b.id
-        JOIN class_master c ON s.class_id = c.id
-        LEFT JOIN question_type_master qt ON q.question_type_id = qt.id
-        LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
-        WHERE q.is_active = 1
+          AND q.marks = 1
         ORDER BY 
           CASE WHEN s.board_id = v_board_id AND s.class_id = v_class_id THEN 1
                WHEN s.class_id = v_class_id THEN 2
                WHEN s.board_id = v_board_id THEN 3
                ELSE 4 END,
           RAND()
-        LIMIT p_limit;
-    END IF;
+        LIMIT 5
+    )
+    UNION ALL
+    (
+        SELECT 
+            q.id AS question_id,
+            q.question AS question_text,
+            q.options,
+            q.correct_answer,
+            q.explanation,
+            2 AS marks,
+            COALESCE(qt.question_type_name, 'SAQ') AS question_type,
+            COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
+            s.subject_name,
+            ch.chapter_name,
+            t.topic_name,
+            b.board_name,
+            c.class_name
+        FROM question_master q
+        JOIN topic_master t ON q.topic_id = t.id
+        JOIN chapter_master ch ON t.chapter_id = ch.id
+        JOIN subject_master s ON ch.subject_id = s.id
+        JOIN board_master b ON s.board_id = b.id
+        JOIN class_master c ON s.class_id = c.id
+        LEFT JOIN question_type_master qt ON q.question_type_id = qt.id
+        LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
+        WHERE q.is_active = 1
+          AND q.marks = 2
+        ORDER BY 
+          CASE WHEN s.board_id = v_board_id AND s.class_id = v_class_id THEN 1
+               WHEN s.class_id = v_class_id THEN 2
+               WHEN s.board_id = v_board_id THEN 3
+               ELSE 4 END,
+          RAND()
+        LIMIT 5
+    )
+    ORDER BY RAND();
 END //
 
 DELIMITER ;
