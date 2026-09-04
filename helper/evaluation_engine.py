@@ -49,6 +49,7 @@ def evaluate_question(question: Question, student_answer: str) -> dict:
         "correctAnswer": correct_ans,
         "isCorrect": is_correct,
         "marksAwarded": marks_awarded,
+        "questionMarks": question.marks or 1,
         "explanation": question.explanation,
         "misconceptionIdentified": None if is_correct else _identify_misconception(question, student_ans),
         "referenceLinks": question.reference_links or [],

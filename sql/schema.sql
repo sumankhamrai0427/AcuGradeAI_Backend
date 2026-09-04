@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS students (
   daily_exams_taken_today INT         NOT NULL DEFAULT 0,
   last_exam_date         DATE         NULL,
   total_exams_taken      INT          NOT NULL DEFAULT 0,
-  average_score          DECIMAL(4,2) NOT NULL DEFAULT 0.00,
+  average_score          DECIMAL(5,2) NOT NULL DEFAULT 0.00,
   streak_days            INT          NOT NULL DEFAULT 0,
   xp                     INT          NOT NULL DEFAULT 250,
   level                  INT          NOT NULL DEFAULT 1,

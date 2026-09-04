@@ -277,10 +277,10 @@ def submit_exam(exam_id):
         )
         gamification_engine.award_xp(session, student, xp_earned, f"exam:{exam.id}")
 
-        # Rolling average + streak + mastery + misconceptions + learning path.
+        # Rolling average percentage (0-100%) + streak + mastery + misconceptions + learning path.
         updated_total = (student.total_exams_taken or 0) + 1
         student.average_score = round(
-            ((float(student.average_score or 0) * (student.total_exams_taken or 0)) + marks_obtained) / updated_total, 2
+            ((float(student.average_score or 0) * (student.total_exams_taken or 0)) + accuracy_percentage) / updated_total, 2
         )
         student.total_exams_taken = updated_total
         student.streak_days = (student.streak_days or 0) + 1

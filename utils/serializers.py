@@ -39,6 +39,7 @@ def submission_to_dict(submission: ExamSubmission) -> dict:
                 "correctAnswer": q.correct_answer if q else "",
                 "isCorrect": ev.is_correct,
                 "marksAwarded": ev.marks_awarded,
+                "questionMarks": q.marks if (q and q.marks) else (ev.marks_awarded if ev.marks_awarded > 0 else 1),
                 "explanation": q.explanation if q else "",
                 "misconceptionIdentified": ev.misconception_identified,
                 "referenceLinks": q.reference_links if q else [],
