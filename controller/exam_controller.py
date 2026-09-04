@@ -1,7 +1,9 @@
+import json
 import uuid
 from datetime import date, datetime
 
 from flask import request, g
+from sqlalchemy import text
 
 from database.dbConnection import get_session
 from helper import diagnostic_engine, exam_generator, gamification_engine, mastery_engine, misconception_engine
@@ -77,6 +79,128 @@ def generate_exam():
             {"exam": exam_generator.exam_to_public_dict(exam)},
             201,
             source=exam.source,
+        )
+
+
+@token_required
+def generate_quick_test():
+    """Generates a random 10-question Quick Diagnostic Test directly from DB
+    via Stored Procedure matching the student's registered Curriculum Board & Class Grade."""
+    payload = request.get_json(force=True, silent=True) or {}
+    if not payload.get("studentId") and request.args.get("studentId"):
+        payload["studentId"] = request.args.get("studentId")
+
+    with get_session() as session:
+        student = _resolve_student_for_request(session, payload)
+        _reset_daily_quota_if_new_day(student)
+
+        # Quota check
+        parent = session.get(Parent, student.parent_id)
+        plan = session.get(SubscriptionPlan, parent.subscription_tier) if parent else None
+        if plan and plan.daily_exam_limit != "unlimited":
+            if (student.daily_exams_taken_today or 0) >= int(plan.daily_exam_limit):
+                raise QuotaExceededError(
+                    f"Daily exam limit ({plan.daily_exam_limit}) reached for the {parent.subscription_tier} plan"
+                )
+
+        # Call Stored Procedure
+        limit = int(payload.get("limit", 10))
+        sp_rows = session.execute(
+            text("CALL sp_generate_quick_test_from_db(:student_id, :limit)"),
+            {"student_id": student.id, "limit": limit}
+        ).mappings().fetchall()
+
+        if not sp_rows:
+            raise NotFoundError("No diagnostic questions found in database for this student")
+
+        primary_subject = sp_rows[0].get("subject_name") or "General Assessment"
+        title = f"{student.class_grade} {student.target_board} Quick Diagnostic Test"
+
+        from model.models import Question
+        exam = Exam(
+            id=str(uuid.uuid4()),
+            student_id=student.id,
+            title=title,
+            board=student.target_board,
+            class_grade=student.class_grade,
+            subject=primary_subject,
+            difficulty="medium",
+            total_marks=sum(int(r.get("marks") or 1) for r in sp_rows),
+            question_count=len(sp_rows),
+            time_limit_minutes=15,
+            rag_knowledge_nodes_used=list({r.get("chapter_name") for r in sp_rows if r.get("chapter_name")}),
+            source="rag-engine-curated",
+            status="GENERATED",
+            created_at=datetime.utcnow(),
+        )
+        session.add(exam)
+        session.flush()
+
+        for idx, row in enumerate(sp_rows):
+            raw_options = row.get("options")
+            parsed_options = None
+            if isinstance(raw_options, str):
+                try:
+                    parsed_options = json.loads(raw_options)
+                except Exception:
+                    parsed_options = [raw_options]
+            elif isinstance(raw_options, list):
+                parsed_options = raw_options
+
+            # Map type to valid Enum: "mcq", "objective", "numerical", "logical"
+            raw_type = (row.get("question_type") or "").lower()
+            if parsed_options and len(parsed_options) > 1:
+                q_type = "mcq"
+            elif "num" in raw_type or "math" in raw_type:
+                q_type = "numerical"
+            elif "logic" in raw_type:
+                q_type = "logical"
+            else:
+                q_type = "objective"
+
+            # Map difficulty to valid Enum: "simple", "medium", "hard"
+            raw_diff = (row.get("difficulty") or "medium").lower()
+            if "easy" in raw_diff or "sim" in raw_diff:
+                q_diff = "simple"
+            elif "hard" in raw_diff or "adv" in raw_diff:
+                q_diff = "hard"
+            else:
+                q_diff = "medium"
+
+            exam.questions.append(
+                Question(
+                    id=str(uuid.uuid4()),
+                    question_number=idx + 1,
+                    type=q_type,
+                    question_text=row.get("question_text") or f"Question {idx + 1}",
+                    options=parsed_options,
+                    correct_answer=str(row.get("correct_answer") or ""),
+                    explanation=row.get("explanation") or "Step-by-step diagnostic solution.",
+                    difficulty=q_diff,
+                    marks=int(row.get("marks") or 1),
+                    topic=row.get("topic_name") or primary_subject,
+                    reference_links=[],
+                    hint=f"Focus on {row.get('topic_name') or primary_subject} fundamentals.",
+                )
+            )
+
+        student.daily_exams_taken_today = (student.daily_exams_taken_today or 0) + 1
+        student.last_exam_date = date.today()
+        session.flush()
+
+        return success(
+            {
+                "exam": exam_generator.exam_to_public_dict(exam),
+                "student": {
+                    "id": student.id,
+                    "name": student.user.name if student.user else "",
+                    "avatar": student.avatar,
+                    "classGrade": student.class_grade,
+                    "targetBoard": student.target_board,
+                }
+            },
+            201,
+            source="mysql-stored-procedure"
         )
 
 

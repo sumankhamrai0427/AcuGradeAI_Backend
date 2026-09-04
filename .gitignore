@@ -30,3 +30,9 @@ backend/uploads/*
 
 # Logs
 *.log
+
+schema.sql
+seed_db.py
+runbooks.py
+runbooks.json
+*env    

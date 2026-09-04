@@ -201,6 +201,10 @@ def create_app() -> Flask:
     def api_exam_generate():
         return exam_controller.generate_exam()
 
+    @app.route("/api/v1/exams/quick-test", methods=["POST", "GET"])
+    def api_exam_quick_test():
+        return exam_controller.generate_quick_test()
+
     @app.route("/api/v1/exams/<exam_id>/submit", methods=["POST"])
     def api_exam_submit(exam_id):
         return exam_controller.submit_exam(exam_id)

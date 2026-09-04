@@ -66,7 +66,7 @@ SUBSCRIPTION_PLANS = [
             "Up to 2 child sub-accounts",
             "Community knowledge base access",
         ],
-        "daily_exam_limit": "1", "max_children": "2", "is_popular": False,
+        "daily_exam_limit": "20", "max_children": "2", "is_popular": False,
     },
     {
         "id": "scholar_pro", "name": "Scholar Pro", "price_monthly": 9, "price_yearly": 89,

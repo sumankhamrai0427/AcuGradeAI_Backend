@@ -719,6 +719,7 @@ DROP PROCEDURE IF EXISTS sp_get_role_menu_permissions;
 DROP PROCEDURE IF EXISTS sp_get_registration_roles;
 DROP PROCEDURE IF EXISTS sp_get_child_registration_masters;
 DROP PROCEDURE IF EXISTS sp_add_child_account;
+DROP PROCEDURE IF EXISTS sp_generate_quick_test_from_db;
 
 DELIMITER //
 
@@ -840,6 +841,101 @@ BEGIN
     FROM roles
     WHERE UPPER(role_name) IN ('PARENT', 'TEACHER') AND is_active = 1
     ORDER BY id ASC;
+END //
+
+CREATE PROCEDURE sp_generate_quick_test_from_db(
+    IN p_student_id INT,
+    IN p_limit INT
+)
+BEGIN
+    DECLARE v_target_board VARCHAR(50);
+    DECLARE v_class_grade VARCHAR(50);
+    DECLARE v_board_id INT;
+    DECLARE v_class_id INT;
+    DECLARE v_count INT DEFAULT 0;
+
+    -- 1. Fetch student info
+    SELECT target_board, class_grade INTO v_target_board, v_class_grade
+    FROM students
+    WHERE id = p_student_id;
+
+    -- 2. Resolve board_id and class_id
+    SELECT id INTO v_board_id FROM board_master WHERE LOWER(board_name) = LOWER(v_target_board) LIMIT 1;
+    SELECT id INTO v_class_id FROM class_master WHERE LOWER(class_name) = LOWER(v_class_grade) LIMIT 1;
+
+    -- Level 1: If questions match exact board & class, check count
+    IF v_board_id IS NOT NULL AND v_class_id IS NOT NULL THEN
+        SELECT COUNT(*) INTO v_count
+        FROM question_master q
+        JOIN topic_master t ON q.topic_id = t.id
+        JOIN chapter_master ch ON t.chapter_id = ch.id
+        JOIN subject_master s ON ch.subject_id = s.id
+        WHERE q.is_active = 1
+          AND s.board_id = v_board_id
+          AND s.class_id = v_class_id;
+    END IF;
+
+    IF v_count >= p_limit THEN
+        SELECT 
+            q.id AS question_id,
+            q.question AS question_text,
+            q.options,
+            q.correct_answer,
+            q.explanation,
+            q.marks,
+            COALESCE(qt.question_type_name, 'mcq') AS question_type,
+            COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
+            s.subject_name,
+            ch.chapter_name,
+            t.topic_name,
+            b.board_name,
+            c.class_name
+        FROM question_master q
+        JOIN topic_master t ON q.topic_id = t.id
+        JOIN chapter_master ch ON t.chapter_id = ch.id
+        JOIN subject_master s ON ch.subject_id = s.id
+        JOIN board_master b ON s.board_id = b.id
+        JOIN class_master c ON s.class_id = c.id
+        LEFT JOIN question_type_master qt ON q.question_type_id = qt.id
+        LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
+        WHERE q.is_active = 1
+          AND s.board_id = v_board_id
+          AND s.class_id = v_class_id
+        ORDER BY RAND()
+        LIMIT p_limit;
+    ELSE
+        -- Fallback: return active questions prioritized by matching class or board, then random
+        SELECT 
+            q.id AS question_id,
+            q.question AS question_text,
+            q.options,
+            q.correct_answer,
+            q.explanation,
+            q.marks,
+            COALESCE(qt.question_type_name, 'mcq') AS question_type,
+            COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
+            s.subject_name,
+            ch.chapter_name,
+            t.topic_name,
+            b.board_name,
+            c.class_name
+        FROM question_master q
+        JOIN topic_master t ON q.topic_id = t.id
+        JOIN chapter_master ch ON t.chapter_id = ch.id
+        JOIN subject_master s ON ch.subject_id = s.id
+        JOIN board_master b ON s.board_id = b.id
+        JOIN class_master c ON s.class_id = c.id
+        LEFT JOIN question_type_master qt ON q.question_type_id = qt.id
+        LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
+        WHERE q.is_active = 1
+        ORDER BY 
+          CASE WHEN s.board_id = v_board_id AND s.class_id = v_class_id THEN 1
+               WHEN s.class_id = v_class_id THEN 2
+               WHEN s.board_id = v_board_id THEN 3
+               ELSE 4 END,
+          RAND()
+        LIMIT p_limit;
+    END IF;
 END //
 
 DELIMITER ;
