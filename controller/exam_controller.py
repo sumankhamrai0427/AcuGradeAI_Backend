@@ -103,8 +103,9 @@ def generate_quick_test():
                     f"Daily exam limit ({plan.daily_exam_limit}) reached for the {parent.subscription_tier} plan"
                 )
 
-        # Call Stored Procedure
-        limit = int(payload.get("limit", 10))
+        is_kid = (student.class_grade or '').strip().lower() in ['class 1', 'class 2', 'class 3', 'class 4']
+        default_limit = 5 if is_kid else 10
+        limit = int(payload.get("limit", default_limit))
         sp_rows = session.execute(
             text("CALL sp_generate_quick_test_from_db(:student_id, :limit)"),
             {"student_id": student.id, "limit": limit}
@@ -113,8 +114,14 @@ def generate_quick_test():
         if not sp_rows:
             raise NotFoundError("No diagnostic questions found in database for this student")
 
+        total_exam_marks = sum(int(r.get("marks") or 1) for r in sp_rows)
         primary_subject = sp_rows[0].get("subject_name") or "General Assessment"
-        title = f"{student.class_grade} {student.target_board} Quick Diagnostic Assessment (15 Marks)"
+        if is_kid:
+            title = f"{student.class_grade} {student.target_board} Adventure Challenge ({total_exam_marks} Marks)"
+            time_limit = 10
+        else:
+            title = f"{student.class_grade} {student.target_board} Quick Diagnostic Assessment ({total_exam_marks} Marks)"
+            time_limit = 15
 
         from model.models import Question
         exam = Exam(
@@ -124,10 +131,10 @@ def generate_quick_test():
             board=student.target_board,
             class_grade=student.class_grade,
             subject=primary_subject,
-            difficulty="medium",
-            total_marks=sum(int(r.get("marks") or 1) for r in sp_rows),
+            difficulty="simple" if is_kid else "medium",
+            total_marks=total_exam_marks,
             question_count=len(sp_rows),
-            time_limit_minutes=15,
+            time_limit_minutes=time_limit,
             rag_knowledge_nodes_used=list({r.get("chapter_name") for r in sp_rows if r.get("chapter_name")}),
             source="rag-engine-curated",
             status="GENERATED",

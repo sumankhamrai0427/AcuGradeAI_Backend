@@ -42,53 +42,54 @@ def generate_diagnostic_analysis(
 def _synthesize_fallback_analysis(
     exam: Exam, marks_obtained: int, evaluations: list[dict], student_name: str, accuracy_percentage: float
 ) -> dict:
-    if marks_obtained >= 9:
+    if accuracy_percentage >= 90:
         band, next_diff = "Competitive Ready", "hard"
-    elif marks_obtained >= 7:
+    elif accuracy_percentage >= 70:
         band = "Proficient"
         next_diff = "hard" if exam.difficulty != "simple" else "medium"
-    elif marks_obtained >= 5:
+    elif accuracy_percentage >= 50:
         band = "Developing"
         next_diff = "medium" if exam.difficulty == "hard" else exam.difficulty
     else:
         band, next_diff = "Needs Foundation", "simple"
 
     incorrect_topics = [e["topic"] for e in evaluations if not e["isCorrect"]]
+    total_m = exam.total_marks or (5 if str(exam.class_grade).lower() in ['class 1', 'class 2', 'class 3', 'class 4'] else 15)
 
     return {
         "overallBand": band,
         "masteryScorePercentage": accuracy_percentage,
         "strengths": [
             f"Demonstrated consistent speed and confidence across {exam.subject} fundamentals.",
-            "Accurate handling of core conceptual definitions and primary formulas.",
-            "Active engagement with 10-mark diagnostic sprint methodology.",
+            "Accurate handling of core conceptual definitions and primary questions.",
+            "Active engagement with adaptive assessment challenges.",
         ],
         "areasToImprove": (
             [f"Reinforce problem-solving speed and edge cases in: {t}" for t in incorrect_topics]
-            or ["Maintain peak accuracy by practicing timed competitive question formats."]
+            or ["Maintain peak accuracy by practicing timed interactive formats."]
         ),
         "kGraphInsights": [
             {
                 "topic": f"{exam.subject} Core Fundamentals",
                 "masteryPercentage": max(30, accuracy_percentage),
                 "status": "mastered" if accuracy_percentage >= 80 else ("reinforce" if accuracy_percentage >= 50 else "critical_gap"),
-                "recommendedAction": "Advance to Olympiad/HOTS drills." if accuracy_percentage >= 80 else "Review NCERT/CIE chapter derivations.",
+                "recommendedAction": "Advance to higher level drills." if accuracy_percentage >= 80 else "Review core chapter fundamentals.",
             },
             {
-                "topic": "Numerical Accuracy & Sign Management",
-                "masteryPercentage": 85 if marks_obtained >= 7 else 60,
-                "status": "mastered" if marks_obtained >= 7 else "reinforce",
-                "recommendedAction": "Practice writing down units explicitly during intermediate calculations.",
+                "topic": "Accuracy & Knowledge Retention",
+                "masteryPercentage": 85 if accuracy_percentage >= 70 else 60,
+                "status": "mastered" if accuracy_percentage >= 70 else "reinforce",
+                "recommendedAction": "Practice writing down and reviewing intermediate steps carefully.",
             },
         ],
         "evolutionaryRoadmap": (
             f"{student_name} completed the {exam.class_grade} {exam.board} {exam.subject} {exam.difficulty} "
-            f"exam with a score of {marks_obtained}/10. Evolutionary roadmap: Focus on weak concept nodes "
-            f"identified in the review below, then progress to {next_diff} difficulty test."
+            f"assessment with a score of {marks_obtained}/{total_m}. Evolutionary roadmap: Focus on weak concept nodes "
+            f"identified in the review below, then progress to {next_diff} difficulty challenge."
         ),
         "encouragementNote": (
-            f"Great work {student_name}! Every 10-mark diagnostic highlights your strengths and pinpoints "
-            f"the exact concepts needed to excel in {exam.board} examinations."
+            f"Great work {student_name}! Every diagnostic highlights your strengths and pinpoints "
+            f"misconceptions early. Keep practicing to build permanent concept mastery."
         ),
         "recommendedNextExam": {
             "board": exam.board, "classGrade": exam.class_grade, "subject": exam.subject,
