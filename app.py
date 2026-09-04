@@ -22,6 +22,7 @@ from controller import (
     subscription_controller,
     teacher_controller,
     upload_file_controller,
+    chat_controller,
 )
 from middleware.dbContext import register_db_teardown
 from middleware.errorMiddleware import register_error_handlers
@@ -345,7 +346,14 @@ def create_app() -> Flask:
         return admin_controller.reset_quota(student_id)
 
     # ============================================================
-    # 12. Document & File Upload Endpoints
+    # 12. Chat Endpoints
+    # ============================================================
+    @app.route("/api/v1/chat", methods=["POST"])
+    def api_chat():
+        return chat_controller.chat()
+
+    # ============================================================
+    # 13. Document & File Upload Endpoints
     # ============================================================
     @app.route("/api/v1/files/upload", methods=["POST"])
     def api_files_upload():
