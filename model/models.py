@@ -84,10 +84,7 @@ class Parent(Base):
     __tablename__ = "parents"
 
     id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    subscription_tier = Column(
-        Enum("free", "scholar_pro", "genius_competitive", name="subscription_tier"),
-        nullable=False, default="free",
-    )
+    subscription_tier = Column(String(50), nullable=True)
     subscription_expiry = Column(DateTime, nullable=True)
 
     children = relationship("Student", back_populates="parent", cascade="all, delete-orphan")
@@ -453,34 +450,6 @@ class PTMSchedule(Base):
     student = relationship("Student")
 
 
-# ------------------------------------------------------------
-# 9. Subscriptions
-# ------------------------------------------------------------
-class SubscriptionPlan(Base):
-    __tablename__ = "subscription_plans"
-
-    id = Column(String(30), primary_key=True)
-    name = Column(String(150), nullable=False)
-    price_monthly = Column(Numeric(8, 2), nullable=False)
-    price_yearly = Column(Numeric(8, 2), nullable=False)
-    currency = Column(String(10), default="USD")
-    badge = Column(String(100), nullable=True)
-    description = Column(String(500), nullable=False)
-    features = Column(JSON, nullable=False)
-    daily_exam_limit = Column(String(20), nullable=False)
-    max_children = Column(String(20), nullable=False)
-    is_popular = Column(Boolean, default=False)
-
-
-class Subscription(Base):
-    __tablename__ = "subscriptions"
-
-    id = Column(String(36), primary_key=True, default=gen_uuid)
-    parent_id = Column(Integer, ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
-    plan_id = Column(String(30), ForeignKey("subscription_plans.id"), nullable=False)
-    status = Column(Enum("ACTIVE", "EXPIRED", "CANCELLED", name="subscription_status"), default="ACTIVE")
-    start_date = Column(DateTime, default=datetime.utcnow)
-    end_date = Column(DateTime, nullable=True)
 
 
 # ------------------------------------------------------------

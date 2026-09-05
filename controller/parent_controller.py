@@ -7,7 +7,7 @@ from sqlalchemy import text
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import roles_required, assert_owns_student
-from model.models import Parent, Student, User, Role, ExamSubmission, LearningPathNode, StudentBadge, SubscriptionPlan
+from model.models import Parent, Student, User, Role, ExamSubmission, LearningPathNode, StudentBadge
 from utils.errors import AppError, NotFoundError
 from utils.response import success
 from utils.security import hash_pin, hash_password
@@ -23,44 +23,33 @@ def get_child_registration_options():
         ).mappings().first()
 
         boards_data = []
-        classes_data = []
-
+        grades_data = []
         if result:
             raw_boards = result.get("boards")
-            raw_classes = result.get("classes")
-
-            if isinstance(raw_boards, str):
-                try:
-                    boards_data = json.loads(raw_boards)
-                except Exception:
-                    boards_data = []
-            elif isinstance(raw_boards, list):
-                boards_data = raw_boards
-
-            if isinstance(raw_classes, str):
-                try:
-                    classes_data = json.loads(raw_classes)
-                except Exception:
-                    classes_data = []
-            elif isinstance(raw_classes, list):
-                classes_data = raw_classes
+            raw_grades = result.get("class_grades")
+            if raw_boards:
+                boards_data = json.loads(raw_boards) if isinstance(raw_boards, str) else raw_boards
+            if raw_grades:
+                grades_data = json.loads(raw_grades) if isinstance(raw_grades, str) else raw_grades
 
         return success({
-            "boards": boards_data or [],
-            "classes": classes_data or [],
+            "boards": boards_data,
+            "classGrades": grades_data
         })
 
-def _badge_ids_for(session, student_id) -> list[str]:
-    s_id = int(student_id) if str(student_id).isdigit() else student_id
-    rows = session.query(StudentBadge).filter(StudentBadge.student_id == s_id).all()
-    return [r.badge_id for r in rows]
+
+def _badge_ids_for(session, student_id: int) -> list[str]:
+    return [
+        sb.badge_id
+        for sb in session.query(StudentBadge).filter(StudentBadge.student_id == student_id).all()
+    ]
 
 
 @token_required
 @roles_required("PARENT")
 def get_dashboard():
     """Consolidated Parent Dashboard API:
-    Returns Parent Profile, Subscription, Enriched Children (with Mastery & Recent Exams),
+    Returns Parent Profile, Enriched Children (with Mastery & Recent Exams),
     Page Access (Menu Permissions), and Stats in ONE single round trip.
     """
     with get_session() as session:
@@ -69,7 +58,7 @@ def get_dashboard():
             raise NotFoundError("User account not found")
         parent = session.get(Parent, g.current_user_id)
         if not parent:
-            parent = Parent(id=user.id, subscription_tier="free")
+            parent = Parent(id=user.id)
             session.add(parent)
             session.flush()
 
@@ -111,8 +100,6 @@ def get_dashboard():
             "name": user.name,
             "email": user.email,
             "role": "parent",
-            "subscriptionTier": parent.subscription_tier,
-            "subscriptionExpiry": parent.subscription_expiry.isoformat() if parent.subscription_expiry else None,
             "createdAt": user.created_at.isoformat() if user.created_at else None,
         }
 
@@ -137,14 +124,12 @@ def get_me():
             raise NotFoundError("User account not found")
         parent = session.get(Parent, g.current_user_id)
         if not parent:
-            parent = Parent(id=user.id, subscription_tier="free")
+            parent = Parent(id=user.id)
             session.add(parent)
             session.flush()
         return success({
             "id": user.id, "name": user.name, "email": user.email, "role": "parent",
-            "subscriptionTier": parent.subscription_tier,
-            "subscriptionExpiry": parent.subscription_expiry.isoformat() if parent.subscription_expiry else None,
-            "createdAt": user.created_at.isoformat(),
+            "createdAt": user.created_at.isoformat() if user.created_at else None,
         })
 
 

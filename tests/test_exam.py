@@ -65,14 +65,13 @@ def test_double_submit_rejected(client, registered_parent, child):
     assert second.get_json()["error"]["code"] == "ALREADY_SUBMITTED"
 
 
-def test_free_plan_daily_quota_enforced(client, registered_parent, child):
+def test_unlimited_exams_allowed(client, registered_parent, child):
     headers = registered_parent["headers"]
     first = _generate_exam(client, headers, child["id"])
     assert first.status_code == 201
 
     second = _generate_exam(client, headers, child["id"])
-    assert second.status_code == 429
-    assert second.get_json()["error"]["code"] == "QUOTA_EXCEEDED"
+    assert second.status_code == 201
 
 
 def test_submission_updates_child_stats_and_mastery(client, registered_parent, child):

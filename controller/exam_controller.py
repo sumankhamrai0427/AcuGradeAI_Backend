@@ -11,8 +11,8 @@ from helper.adaptive_learning_engine import update_learning_path_after_submissio
 from helper.evaluation_engine import evaluate_exam
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import assert_owns_student
-from model.models import Exam, ExamSubmission, QuestionEvaluation, DiagnosticAnalysis, Student, Parent, SubscriptionPlan
-from utils.errors import AppError, NotFoundError, QuotaExceededError, ValidationError
+from model.models import Exam, ExamSubmission, QuestionEvaluation, DiagnosticAnalysis, Student, Parent
+from utils.errors import AppError, NotFoundError, ValidationError
 from utils.response import success
 from utils.serializers import submission_to_dict
 from utils.validators import require_fields, validate_board, validate_class_grade, validate_subject, validate_difficulty
@@ -23,10 +23,9 @@ def _resolve_student_for_request(session, payload: dict) -> Student:
     """A parent generates an exam on behalf of a named child; a student
     token (from /auth/child-login) generates it for themselves."""
     if g.current_user_role == "STUDENT":
-        s_id = int(g.current_user_id) if str(g.current_user_id).isdigit() else g.current_user_id
-        student = session.get(Student, s_id)
+        student = session.get(Student, g.current_user_id)
         if not student:
-            raise NotFoundError("Student not found")
+            raise NotFoundError("Student profile not found")
         return student
 
     require_fields(payload, ["studentId"])
@@ -51,16 +50,6 @@ def generate_exam():
 
     with get_session() as session:
         student = _resolve_student_for_request(session, payload)
-        _reset_daily_quota_if_new_day(student)
-
-        # Quota is re-checked here server-side
-        parent = session.get(Parent, student.parent_id)
-        plan = session.get(SubscriptionPlan, parent.subscription_tier) if parent else None
-        if plan and plan.daily_exam_limit != "unlimited":
-            if student.daily_exams_taken_today >= int(plan.daily_exam_limit):
-                raise QuotaExceededError(
-                    f"Daily exam limit ({plan.daily_exam_limit}) reached for the {parent.subscription_tier} plan"
-                )
 
         exam = exam_generator.generate_exam(
             session,
@@ -92,16 +81,6 @@ def generate_quick_test():
 
     with get_session() as session:
         student = _resolve_student_for_request(session, payload)
-        _reset_daily_quota_if_new_day(student)
-
-        # Quota check
-        parent = session.get(Parent, student.parent_id)
-        plan = session.get(SubscriptionPlan, parent.subscription_tier) if parent else None
-        if plan and plan.daily_exam_limit != "unlimited":
-            if (student.daily_exams_taken_today or 0) >= int(plan.daily_exam_limit):
-                raise QuotaExceededError(
-                    f"Daily exam limit ({plan.daily_exam_limit}) reached for the {parent.subscription_tier} plan"
-                )
 
         is_kid = (student.class_grade or '').strip().lower() in ['class 1', 'class 2', 'class 3', 'class 4']
         default_limit = 5 if is_kid else 10

@@ -27,7 +27,7 @@ TRANSACTIONAL_TABLES = [
     "questions", "exams", "messages", "conversations", "ptm_schedules",
     "shared_dossiers", "xp_events", "student_badges", "mastery",
     "misconceptions", "learning_path_nodes", "audit_logs",
-    "refresh_tokens", "subscriptions", "document_chunks", "documents"
+    "refresh_tokens", "document_chunks", "documents"
 ]
 
 # 2. User profile extension tables

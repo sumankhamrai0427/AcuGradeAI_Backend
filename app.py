@@ -19,7 +19,6 @@ from controller import (
     parent_controller,
     runbook_controller,
     student_controller,
-    subscription_controller,
     teacher_controller,
     upload_file_controller,
     chat_controller,
@@ -225,16 +224,6 @@ def create_app() -> Flask:
     def api_leaderboard():
         return leaderboard_controller.leaderboard()
 
-    # ============================================================
-    # 8. Subscription Endpoints
-    # ============================================================
-    @app.route("/api/v1/subscriptions/plans", methods=["GET"])
-    def api_subscriptions_list_plans():
-        return subscription_controller.list_plans()
-
-    @app.route("/api/v1/subscriptions/upgrade", methods=["POST"])
-    def api_subscriptions_upgrade():
-        return subscription_controller.upgrade_plan()
 
     # ============================================================
     # 9. Communication & PTC Endpoints
@@ -341,9 +330,6 @@ def create_app() -> Flask:
     def api_admin_list_students():
         return admin_controller.list_students()
 
-    @app.route("/api/v1/admin/children/<student_id>/reset-quota", methods=["POST"])
-    def api_admin_reset_quota(student_id):
-        return admin_controller.reset_quota(student_id)
 
     # ============================================================
     # 12. Chat Endpoints
