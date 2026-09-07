@@ -1,12 +1,30 @@
 """Constants mirrored from the frontend's src/types.ts so both sides agree on
 valid enum values without the backend needing to import TypeScript."""
 
-BOARDS = ["CBSE", "ICSE", "ISC", "UK-Cambridge", "NCERT", "NEET", "IIT"]
+BOARDS = [
+    "CBSE", "ICSE", "ISC", "WBBSE", "WBCHSE", "UK-Cambridge", "NCERT", "NEET", "IIT", "WB"
+]
+
+ACTIVE_BOARDS = ["CBSE", "ICSE", "ISC", "WBBSE", "WBCHSE"]
 
 CLASS_GRADES = [
+    "Class 1", "Class 2", "Class 3", "Class 4",
     "Class 5", "Class 6", "Class 7", "Class 8",
     "Class 9", "Class 10", "Class 11", "Class 12",
 ]
+
+BOARD_CLASS_MAPPING = {
+    "CBSE": [f"Class {i}" for i in range(1, 13)],
+    "ICSE": [f"Class {i}" for i in range(1, 11)],
+    "ISC": ["Class 11", "Class 12"],
+    "WBBSE": [f"Class {i}" for i in range(1, 11)],
+    "WBCHSE": ["Class 11", "Class 12"],
+    "WB": [f"Class {i}" for i in range(1, 11)],
+    "UK-Cambridge": [f"Class {i}" for i in range(1, 13)],
+    "NCERT": [f"Class {i}" for i in range(1, 13)],
+    "NEET": ["Class 11", "Class 12"],
+    "IIT": ["Class 11", "Class 12"],
+}
 
 SUBJECTS = [
     "Mathematics", "Physics", "Chemistry", "Biology", "Science",

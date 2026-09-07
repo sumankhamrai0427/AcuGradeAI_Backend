@@ -98,6 +98,10 @@ def create_app() -> Flask:
     def api_auth_roles():
         return auth_controller.get_registration_roles()
 
+    @app.route("/api/v1/auth/check-username", methods=["GET"])
+    def api_auth_check_username():
+        return auth_controller.check_username()
+
     @app.route("/api/v1/auth/child-login", methods=["POST"])
     def api_auth_child_login():
         return auth_controller.child_login()
@@ -111,11 +115,10 @@ def create_app() -> Flask:
         return auth_controller.logout()
 
     # ============================================================
-    # ============================================================
     # 2.5 Master Data Endpoints
     # ============================================================
-    @app.route("/api/v1/master/child-registration-options", methods=["GET"])
-    def api_master_child_registration_options():
+    @app.route("/api/v1/master/board_class_dropdown", methods=["GET"])
+    def api_master_board_class_dropdown():
         return parent_controller.get_child_registration_options()
 
     # ============================================================

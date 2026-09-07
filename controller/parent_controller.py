@@ -2,7 +2,7 @@ import json
 import uuid
 
 from flask import request, g
-from sqlalchemy import text
+from sqlalchemy import text, func
 
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
@@ -12,7 +12,8 @@ from utils.errors import AppError, NotFoundError
 from utils.response import success
 from utils.security import hash_pin, hash_password
 from utils.serializers import student_to_child_account, submission_to_dict, learning_path_node_to_dict
-from utils.validators import require_fields, validate_board, validate_class_grade, validate_pin
+from utils.constants import BOARD_CLASS_MAPPING
+from utils.validators import require_fields, validate_board, validate_class_grade, validate_board_class, validate_pin, validate_username
 
 
 def get_child_registration_options():
@@ -23,18 +24,22 @@ def get_child_registration_options():
         ).mappings().first()
 
         boards_data = []
-        grades_data = []
+        classes_data = []
         if result:
             raw_boards = result.get("boards")
-            raw_grades = result.get("class_grades")
+            raw_classes = result.get("classes") or result.get("class_grades")
             if raw_boards:
-                boards_data = json.loads(raw_boards) if isinstance(raw_boards, str) else raw_boards
-            if raw_grades:
-                grades_data = json.loads(raw_grades) if isinstance(raw_grades, str) else raw_grades
+                parsed_boards = json.loads(raw_boards) if isinstance(raw_boards, str) else raw_boards
+                boards_data = [{"id": b["id"], "name": b["name"], "description": b.get("description", "")} for b in parsed_boards if isinstance(b, dict) and "id" in b and "name" in b]
+            if raw_classes:
+                parsed_classes = json.loads(raw_classes) if isinstance(raw_classes, str) else raw_classes
+                classes_data = [{"id": c["id"], "name": c["name"]} for c in parsed_classes if isinstance(c, dict) and "id" in c and "name" in c]
 
         return success({
             "boards": boards_data,
-            "classGrades": grades_data
+            "classes": classes_data,
+            "classGrades": classes_data,
+            "boardClassesMap": BOARD_CLASS_MAPPING,
         })
 
 
@@ -144,74 +149,77 @@ def list_children():
 @token_required
 @roles_required("PARENT")
 def add_child():
-    """Adds a child sub-account using Stored Procedure sp_add_child_account."""
+    """Adds a child sub-account with unique username, parent's email, and initial student profile."""
     payload = request.get_json(force=True, silent=True) or {}
-    require_fields(payload, ["name", "classGrade", "targetBoard"])
+    require_fields(payload, ["name", "username", "classGrade", "targetBoard"])
     
+    username = payload["username"].strip()
+    validate_username(username)
+
     password = str(payload.get("password") or payload.get("pin") or "1234").strip()
     if not password:
-        raise AppError("VALIDATION_ERROR", "Password or PIN is required", 400)
+        raise AppError("VALIDATION_ERROR", "Password is required", 400)
     
     password_hash = hash_password(password)
+    name = payload["name"].strip()
+    class_grade = payload["classGrade"].strip()
+    target_board = payload["targetBoard"].strip()
+    validate_board_class(target_board, class_grade)
+    school_name = payload.get("schoolName", "").strip() or None
+    avatar = payload.get("avatar", "👦")
     
     with get_session() as session:
-        try:
-            result = session.execute(
-                text("""
-                    CALL sp_add_child_account(
-                        :parent_id,
-                        :name,
-                        :email,
-                        :password_hash,
-                        :class_grade,
-                        :target_board,
-                        :school_name,
-                        :avatar
-                    )
-                """),
-                {
-                    "parent_id": g.current_user_id,
-                    "name": payload["name"].strip(),
-                    "email": payload.get("email", "").strip() or None,
-                    "password_hash": password_hash,
-                    "class_grade": payload["classGrade"].strip(),
-                    "target_board": payload["targetBoard"].strip(),
-                    "school_name": payload.get("schoolName", "").strip() or None,
-                    "avatar": payload.get("avatar", "👦"),
-                }
-            ).mappings().first()
-            session.commit()
-        except Exception as e:
-            if "CHILD_LIMIT_REACHED" in str(e):
-                raise AppError("CHILD_LIMIT_REACHED", "Your subscription plan child limit has been reached", 403)
-            raise
-        
-        if not result:
-            raise AppError("CHILD_CREATION_FAILED", "Failed to create child account", 500)
-        
-        created_at_val = result.get("created_at")
-        created_at_str = created_at_val.isoformat() if hasattr(created_at_val, "isoformat") else str(created_at_val)
+        # 1. Check global username uniqueness (case-insensitive)
+        existing_user = session.query(User).filter(func.lower(User.username) == func.lower(username)).first()
+        if existing_user:
+            raise AppError("USERNAME_TAKEN", f"The username '{username}' is already taken. Please choose another username.", 409)
 
-        return success({
-            "id": str(result["id"]),
-            "name": result["name"],
-            "email": result["email"],
-            "parentId": str(result["parent_id"]),
-            "avatar": result["avatar"],
-            "classGrade": result["class_grade"],
-            "targetBoard": result["target_board"],
-            "schoolName": result["school_name"],
-            "pin": password if len(password) == 4 and password.isdigit() else "••••",
-            "dailyExamsTakenToday": result["daily_exams_taken_today"],
-            "totalExamsTaken": result["total_exams_taken"],
-            "averageScore": float(result["average_score"] or 0),
-            "streakDays": result["streak_days"],
-            "xp": result["xp"],
-            "level": result["level"],
-            "badges": [],
-            "topicMastery": {},
-            "createdAt": created_at_str,
-        }, 201)
+        # 2. Get parent user to assign parent's email to child
+        parent_user = session.get(User, g.current_user_id)
+        parent_email = parent_user.email if parent_user else None
+
+        # 3. Get STUDENT role
+        student_role = session.query(Role).filter(Role.role_name == "STUDENT").first()
+        if not student_role:
+            student_role = session.query(Role).filter(Role.id == 1).first()
+        if not student_role:
+            student_role = Role(role_name="STUDENT", is_active=True)
+            session.add(student_role)
+            session.flush()
+
+        # 4. Create User for child
+        child_user = User(
+            name=name,
+            username=username,
+            email=parent_email,
+            password_hash=password_hash,
+            role_id=student_role.id,
+            is_active=True,
+            created_by=g.current_user_id,
+        )
+        session.add(child_user)
+        session.flush()
+
+        # 5. Create Student record
+        student = Student(
+            id=child_user.id,
+            parent_id=g.current_user_id,
+            avatar=avatar,
+            class_grade=class_grade,
+            target_board=target_board,
+            school_name=school_name,
+            pin_hash=hash_pin(password[:4] if len(password) >= 4 and password[:4].isdigit() else "1234"),
+            xp=0,
+            level=1,
+            streak_days=0,
+            total_exams_taken=0,
+            average_score=0.0,
+            daily_exams_taken_today=0,
+        )
+        session.add(student)
+        session.commit()
+
+        return success(student_to_child_account(student, []), 201)
 
 
 @token_required
@@ -222,6 +230,11 @@ def update_child(student_id):
 
     with get_session() as session:
         student = assert_owns_student(session, s_id, g.current_user_id)
+
+        new_class = payload.get("classGrade", student.class_grade)
+        new_board = payload.get("targetBoard", student.target_board)
+        if "classGrade" in payload or "targetBoard" in payload:
+            validate_board_class(new_board, new_class)
 
         if "name" in payload and student.user:
             student.user.name = payload["name"]

@@ -1,18 +1,20 @@
-"""Development cleanup utility.
-Preserves Master tables, Curriculum, Question Banks, Roles and Admin Account.
+"""Development cleanup utility for AcuGrade AI.
+Truncates all transactional tables and user accounts, while automatically re-seeding
+the primary Admin user and preserving Master tables (Curriculum, Questions, Roles, Badges, Plans).
 
 Usage:
-    python cleanup_db.py --tables          # truncate transactional tables & reset student stats
-    python cleanup_db.py --clean-users     # truncate non-admin users (preserves Admin user & masters)
-    python cleanup_db.py --all-tables      # truncate all data tables except Admin and master tables
-    python cleanup_db.py --vector-store    # wipe the local Chroma persistence dir
-    python cleanup_db.py --uploads         # delete files in UPLOAD_DIR
-    python cleanup_db.py --all             # clean transactions, non-admin users, vector-store & uploads
+    python cleanup_db.py                  # Full clean: Truncates transactions & users, auto-seeds Admin
+    python cleanup_db.py --tables         # Truncates transactional tables only
+    python cleanup_db.py --clean-users    # Truncates user tables & re-seeds Admin
+    python cleanup_db.py --vector-store   # Wipes local Chroma vector store
+    python cleanup_db.py --uploads        # Deletes files in UPLOAD_DIR
+    python cleanup_db.py --all            # Cleans everything (DB, Vector Store, Uploads) + re-seeds Admin
 """
 import argparse
 import os
 import shutil
 import sys
+from datetime import datetime
 
 # Ensure backend directory is in path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
@@ -20,6 +22,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
 from sqlalchemy import text
 from database.dbConnection import get_session
 from utils.config import config
+from utils.security import hash_password
+from model.models import User, Role
 
 # 1. Transactional data tables
 TRANSACTIONAL_TABLES = [
@@ -33,6 +37,11 @@ TRANSACTIONAL_TABLES = [
 # 2. User profile extension tables
 USER_PROFILE_TABLES = ["students", "parents", "teachers"]
 
+ADMIN_EMAIL = "admin123@acugrade.ai"
+ADMIN_USERNAME = "admin123"
+ADMIN_NAME = "Admin123"
+ADMIN_PASSWORD_RAW = "admin1234"
+
 
 def _guard_production():
     if config.APP_ENV == "production":
@@ -40,47 +49,66 @@ def _guard_production():
 
 
 def clean_transactional_tables():
+    """Truncates all runtime transactional tables and resets student stats."""
     _guard_production()
     with get_session() as session:
         session.execute(text("SET FOREIGN_KEY_CHECKS=0;"))
         for table in TRANSACTIONAL_TABLES:
             session.execute(text(f"TRUNCATE TABLE `{table}`;"))
         session.execute(text("SET FOREIGN_KEY_CHECKS=1;"))
-        
-        # Reset student stats if students table exists
-        try:
-            session.execute(text("""
-                UPDATE students SET 
-                    daily_exams_taken_today = 0,
-                    total_exams_taken = 0,
-                    average_score = 0.00,
-                    streak_days = 0,
-                    xp = 250,
-                    level = 1;
-            """))
-        except Exception:
-            pass
         session.commit()
-    print(f"[OK] Truncated transactional tables & reset metrics: {', '.join(TRANSACTIONAL_TABLES)}")
+    print(f"[OK] Truncated {len(TRANSACTIONAL_TABLES)} transactional tables successfully.")
 
 
-def clean_non_admin_users():
+def seed_admin_user(session):
+    """Ensures Admin user exists with default credentials."""
+    # Find Admin Role ID (default 4)
+    admin_role = session.query(Role).filter(Role.role_name == "ADMIN").first()
+    admin_role_id = admin_role.id if admin_role else 4
+
+    admin_user = User(
+        name=ADMIN_NAME,
+        username=ADMIN_USERNAME,
+        email=ADMIN_EMAIL,
+        password_hash=hash_password(ADMIN_PASSWORD_RAW),
+        role_id=admin_role_id,
+        auth_provider="EMAIL",
+        is_active=True,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    session.add(admin_user)
+    session.flush()
+    print(f"[OK] Auto-seeded Admin User:")
+    print(f"     * Email:    {ADMIN_EMAIL}")
+    print(f"     * Username: {ADMIN_USERNAME}")
+    print(f"     * Password: {ADMIN_PASSWORD_RAW}")
+    print(f"     * Role ID:  {admin_role_id} (ADMIN)")
+
+
+def clean_users_and_seed_admin():
+    """Truncates student, parent, teacher and users tables, then re-seeds Admin."""
     _guard_production()
     with get_session() as session:
         session.execute(text("SET FOREIGN_KEY_CHECKS=0;"))
         for table in USER_PROFILE_TABLES:
             session.execute(text(f"TRUNCATE TABLE `{table}`;"))
-        session.execute(text("DELETE FROM users WHERE role_id != 4;"))
+        session.execute(text("TRUNCATE TABLE `users`;"))
         session.execute(text("SET FOREIGN_KEY_CHECKS=1;"))
+        
+        # Seed Admin user
+        seed_admin_user(session)
         session.commit()
-    print("[OK] Deleted non-admin users. Only Admin (role_id=4) & master data preserved.")
+    print("[OK] User tables truncated and Admin user re-created successfully.")
 
 
 def clean_all_data_tables():
+    """Performs full database cleanup (Transactions + Users) and auto-seeds Admin."""
     _guard_production()
+    print("--- Starting Full Database Cleanup ---")
     clean_transactional_tables()
-    clean_non_admin_users()
-    print("[OK] All transaction data and test users cleaned successfully (Admin preserved).")
+    clean_users_and_seed_admin()
+    print("[SUCCESS] All transactional & user data reset. Admin account is ready for login.")
 
 
 def clean_vector_store():
@@ -110,24 +138,24 @@ def clean_uploads():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="AcuGrade dev database/storage cleanup")
+    parser = argparse.ArgumentParser(description="AcuGrade Database & Storage Cleanup Utility")
     parser.add_argument("--tables", action="store_true", help="Truncate transactional tables only")
-    parser.add_argument("--clean-users", action="store_true", help="Delete non-admin users (preserve Admin)")
-    parser.add_argument("--all-tables", action="store_true", help="Truncate transaction tables and test users")
-    parser.add_argument("--vector-store", action="store_true", help="Wipe local Chroma persistence")
-    parser.add_argument("--uploads", action="store_true", help="Delete uploaded files")
-    parser.add_argument("--all", action="store_true", help="Run all cleanup tasks")
+    parser.add_argument("--clean-users", action="store_true", help="Truncate user tables & re-seed Admin")
+    parser.add_argument("--all-tables", action="store_true", help="Truncate transaction tables + users & re-seed Admin")
+    parser.add_argument("--vector-store", action="store_true", help="Wipe local Chroma vector persistence")
+    parser.add_argument("--uploads", action="store_true", help="Delete temporary uploaded files")
+    parser.add_argument("--all", action="store_true", help="Run complete reset (DB + Vector Store + Uploads)")
     args = parser.parse_args()
 
+    # Default behavior if executed directly without args: perform full DB clean + Admin re-seed
     if not any([args.tables, args.clean_users, args.all_tables, args.vector_store, args.uploads, args.all]):
-        # Default behavior if executed directly: clean transactions
-        clean_transactional_tables()
+        clean_all_data_tables()
         raise SystemExit(0)
 
     if args.all_tables or args.all:
         clean_all_data_tables()
     elif args.clean_users:
-        clean_non_admin_users()
+        clean_users_and_seed_admin()
     elif args.tables:
         clean_transactional_tables()
 

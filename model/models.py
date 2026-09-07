@@ -54,7 +54,8 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(150), nullable=False)
-    email = Column(String(190), nullable=False, unique=True)
+    username = Column(String(80), nullable=False, unique=True, index=True)
+    email = Column(String(190), nullable=True, index=True)
     password_hash = Column(String(255), nullable=False)
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
     is_active = Column(Boolean, default=True)
@@ -84,8 +85,6 @@ class Parent(Base):
     __tablename__ = "parents"
 
     id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    subscription_tier = Column(String(50), nullable=True)
-    subscription_expiry = Column(DateTime, nullable=True)
 
     children = relationship("Student", back_populates="parent", cascade="all, delete-orphan")
     user = relationship("User", foreign_keys=[id])
@@ -212,7 +211,7 @@ class Question(Base):
     id = Column(String(36), primary_key=True, default=gen_uuid)
     exam_id = Column(String(36), ForeignKey("exams.id", ondelete="CASCADE"), nullable=False)
     question_number = Column(Integer, nullable=False)
-    type = Column(Enum("mcq", "objective", "numerical", "logical", name="question_type"), nullable=False)
+    type = Column(String(50), nullable=False, default="mcq")
     question_text = Column(Text, nullable=False)
     options = Column(JSON, nullable=True)
     correct_answer = Column(String(500), nullable=False)

@@ -15,7 +15,7 @@ from model.models import Exam, ExamSubmission, QuestionEvaluation, DiagnosticAna
 from utils.errors import AppError, NotFoundError, ValidationError
 from utils.response import success
 from utils.serializers import submission_to_dict
-from utils.validators import require_fields, validate_board, validate_class_grade, validate_subject, validate_difficulty
+from utils.validators import require_fields, validate_board, validate_class_grade, validate_board_class, validate_subject, validate_difficulty
 
 
 
@@ -50,13 +50,15 @@ def generate_exam():
 
     with get_session() as session:
         student = _resolve_student_for_request(session, payload)
+        target_class = payload.get("classGrade", student.class_grade)
+        validate_board_class(payload["board"], target_class)
 
         exam = exam_generator.generate_exam(
             session,
             student_id=student.id,
             student_name=student.user.name if student.user else "Student",
             board=payload["board"],
-            class_grade=payload.get("classGrade", student.class_grade),
+            class_grade=target_class,
             subject=payload["subject"],
             difficulty=payload["difficulty"],
         )

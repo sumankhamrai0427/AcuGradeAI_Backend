@@ -3,10 +3,11 @@ from datetime import datetime, timedelta
 
 import jwt
 from flask import request, g
-from sqlalchemy import text
+from sqlalchemy import text, func
 
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
+from model.models import User, Role, Parent, Student
 from utils.config import config
 from utils.errors import AppError, UnauthorizedError
 from utils.response import success
@@ -14,7 +15,7 @@ from utils.security import (
     hash_password, verify_password, create_access_token, create_refresh_token,
     decode_token, verify_pin,
 )
-from utils.validators import require_fields, validate_email, validate_password_strength
+from utils.validators import require_fields, validate_email, validate_password_strength, validate_username
 
 # pyrefly: ignore [missing-import]
 from google.oauth2 import id_token as google_id_token
@@ -68,40 +69,49 @@ _get_page_access = get_page_access_for_role
 
 def register():
     payload = request.get_json(force=True, silent=True) or {}
-    require_fields(payload, ["name", "email", "password"])
+    require_fields(payload, ["name", "username", "email", "password"])
+    validate_username(payload["username"])
     validate_email(payload["email"])
     validate_password_strength(payload["password"])
 
+    name = payload["name"].strip()
+    username = payload["username"].strip()
+    email = payload["email"].strip().lower()
     password_hash = hash_password(payload["password"])
     requested_role = str(payload.get("role", "PARENT")).strip().upper()
     role_name = "TEACHER" if requested_role == "TEACHER" else "PARENT"
 
     with get_session() as session:
-        try:
-            result = session.execute(
-                text("CALL sp_register_parent(:name, :email, :password_hash, :role_name)"),
-                {
-                    "name": payload["name"].strip(),
-                    "email": payload["email"].strip().lower(),
-                    "password_hash": password_hash,
-                    "role_name": role_name,
-                }
-            ).mappings().first()
-            session.commit()
-        except Exception as e:
-            if "EMAIL_TAKEN" in str(e):
-                raise AppError("EMAIL_TAKEN", "An account with this email already exists", 409)
-            raise
+        # Check global username uniqueness
+        existing_username = session.query(User).filter(func.lower(User.username) == func.lower(username)).first()
+        if existing_username:
+            raise AppError("USERNAME_TAKEN", "This username is already taken. Please choose another username.", 409)
 
-        if not result:
-            raise AppError("REGISTRATION_FAILED", "Failed to register user", 500)
+        role = session.query(Role).filter(Role.role_name == role_name).first()
+        if not role:
+            role = Role(role_name=role_name, is_active=True)
+            session.add(role)
+            session.flush()
 
-        tokens = _issue_tokens(session, result["id"], result["role_name"])
-        page_access = _get_page_access(session, result["role_name"])
+        user = User(
+            name=name,
+            username=username,
+            email=email,
+            password_hash=password_hash,
+            role_id=role.id,
+            is_active=True,
+        )
+        session.add(user)
+        session.flush()
+
+        if role_name == "PARENT":
+            parent = Parent(id=user.id)
+            session.add(parent)
+            session.flush()
+
+        tokens = _issue_tokens(session, user.id, role_name)
+        page_access = _get_page_access(session, role_name)
         session.commit()
-
-        created_at_val = result.get("created_at")
-        created_at_str = created_at_val.isoformat() if hasattr(created_at_val, "isoformat") else str(created_at_val)
 
         return success(
             {
@@ -114,15 +124,15 @@ def register():
                 "accessToken": tokens["accessToken"],
                 "refreshToken": tokens["refreshToken"],
                 "user": {
-                    "id": result["id"],
-                    "name": result["name"],
-                    "email": result["email"],
-                    "roleId": result["role_id"],
-                    "roleName": result["role_name"],
-                    "role": result["role_name"],
-                    "subscriptionTier": result.get("subscription_tier", "free"),
-                    "isActive": result["is_active"],
-                    "createdAt": created_at_str,
+                    "id": user.id,
+                    "name": user.name,
+                    "username": user.username,
+                    "email": user.email,
+                    "roleId": user.role_id,
+                    "roleName": role_name,
+                    "role": role_name.lower(),
+                    "isActive": user.is_active,
+                    "createdAt": user.created_at.isoformat() if user.created_at else None,
                 },
                 "pageAccess": page_access,
             },
@@ -133,32 +143,35 @@ def register():
 
 def login():
     payload = request.get_json(force=True, silent=True) or {}
-    require_fields(payload, ["email", "password"])
+    require_fields(payload, ["username", "password"])
 
-    email = payload["email"].strip()
+    username = payload["username"].strip()
+    password = payload["password"]
 
     with get_session() as session:
-        user = session.execute(
-            text("CALL sp_get_user_for_login(:email)"),
-            {"email": email}
-        ).mappings().first()
+        user = session.query(User).filter(func.lower(User.username) == func.lower(username)).first()
 
         if not user:
-            raise UnauthorizedError("Invalid email or password", code="INVALID_CREDENTIALS")
+            # Optional fallback check on email if someone entered their email
+            user = session.query(User).filter(func.lower(User.email) == func.lower(username)).first()
+
+        if not user:
+            raise UnauthorizedError("Invalid username or password", code="INVALID_CREDENTIALS")
         
-        if not user["password_hash"]:
+        if not user.password_hash:
             raise UnauthorizedError(
-                "This account was registered with Google. Please use 'Continue with Google' to sign in.",
+                "This account was registered with Google. Please use your credentials.",
                 code="GOOGLE_AUTH_REQUIRED"
             )
 
-        if not verify_password(payload["password"], user["password_hash"]):
-            raise UnauthorizedError("Invalid email or password", code="INVALID_CREDENTIALS")
-        if not user["is_active"]:
+        if not verify_password(password, user.password_hash):
+            raise UnauthorizedError("Invalid username or password", code="INVALID_CREDENTIALS")
+        if not user.is_active:
             raise UnauthorizedError("This account is not active", code="ACCOUNT_INACTIVE")
 
-        tokens = _issue_tokens(session, user["id"], user["role_name"])
-        page_access = _get_page_access(session, user["role_name"])
+        role_name = user.role.role_name if user.role else "STUDENT"
+        tokens = _issue_tokens(session, user.id, role_name)
+        page_access = _get_page_access(session, role_name)
         session.commit()
 
         return success(
@@ -172,15 +185,15 @@ def login():
                 "accessToken": tokens["accessToken"],
                 "refreshToken": tokens["refreshToken"],
                 "user": {
-                    "id": user["id"],
-                    "name": user["name"],
-                    "email": user["email"],
-                    "roleId": user["role_id"],
-                    "roleName": user["role_name"],
-                    "role": user["role_name"],
-                    "authProvider": user.get("auth_provider", "EMAIL"),
-                    "subscriptionTier": user.get("subscription_tier", "free"),
-                    "isActive": user["is_active"],
+                    "id": user.id,
+                    "name": user.name,
+                    "username": user.username,
+                    "email": user.email,
+                    "roleId": user.role_id,
+                    "roleName": role_name,
+                    "role": role_name.lower(),
+                    "authProvider": user.auth_provider if hasattr(user, "auth_provider") else "LOCAL",
+                    "isActive": user.is_active,
                 },
                 "pageAccess": page_access,
             },
@@ -334,32 +347,65 @@ def google_auth():
     if not email:
         raise AppError("INVALID_TOKEN", "Google account did not provide a verified email", 400)
 
+    import uuid
     name = name or email.split("@")[0]
+    email = email.strip().lower()
     requested_role = str(payload.get("role", "PARENT")).strip().upper()
     role_name = "TEACHER" if requested_role == "TEACHER" else "PARENT"
+    provided_username = (payload.get("username") or "").strip()
 
     with get_session() as session:
-        result = session.execute(
-            text("CALL sp_google_login_or_register(:name, :email, :google_id, :role_name)"),
-            {
-                "name": name.strip(),
-                "email": email.strip().lower(),
-                "google_id": google_id,
-                "role_name": role_name,
-            }
-        ).mappings().first()
+        # Check if user already exists with this email
+        user = session.query(User).filter(func.lower(User.email) == email).first()
 
-        if not result:
-            raise AppError("AUTH_FAILED", "Failed to authenticate user with Google", 500)
-        if not result["is_active"]:
+        if not user:
+            # If new user and no username provided, request username from frontend
+            if not provided_username:
+                return success({
+                    "requiresUsername": True,
+                    "email": email,
+                    "name": name,
+                    "googleId": google_id,
+                    "token": token_str,
+                }, message="Please provide a username to complete registration")
+            
+            # Username provided - validate and register
+            validate_username(provided_username)
+            existing_user = session.query(User).filter(func.lower(User.username) == func.lower(provided_username)).first()
+            if existing_user:
+                raise AppError("USERNAME_TAKEN", f"The username '{provided_username}' is already taken. Please choose another username.", 409)
+
+            role = session.query(Role).filter(Role.role_name == role_name).first()
+            if not role:
+                role = Role(role_name=role_name, is_active=True)
+                session.add(role)
+                session.flush()
+
+            user = User(
+                name=name.strip(),
+                username=provided_username,
+                email=email,
+                password_hash=hash_password(uuid.uuid4().hex[:12]),
+                role_id=role.id,
+                is_active=True,
+            )
+            session.add(user)
+            session.flush()
+
+            if role_name == "PARENT":
+                parent = Parent(id=user.id)
+                session.add(parent)
+                session.flush()
+
+        if not user.is_active:
             raise UnauthorizedError("This account is not active", code="ACCOUNT_INACTIVE")
 
-        tokens = _issue_tokens(session, result["id"], result["role_name"])
-        page_access = _get_page_access(session, result["role_name"])
+        user_role_name = user.role.role_name if user.role else role_name
+        tokens = _issue_tokens(session, user.id, user_role_name)
+        page_access = _get_page_access(session, user_role_name)
         session.commit()
 
-        created_at_val = result.get("created_at")
-        created_at_str = created_at_val.isoformat() if hasattr(created_at_val, "isoformat") else str(created_at_val)
+        created_at_str = user.created_at.isoformat() if user.created_at else None
 
         return success(
             {
@@ -372,15 +418,14 @@ def google_auth():
                 "accessToken": tokens["accessToken"],
                 "refreshToken": tokens["refreshToken"],
                 "user": {
-                    "id": result["id"],
-                    "name": result["name"],
-                    "email": result["email"],
-                    "roleId": result["role_id"],
-                    "roleName": result["role_name"],
-                    "role": result["role_name"],
-                    "authProvider": result.get("auth_provider", "GOOGLE"),
-                    "subscriptionTier": result.get("subscription_tier", "free"),
-                    "isActive": result["is_active"],
+                    "id": user.id,
+                    "name": user.name,
+                    "username": user.username,
+                    "email": user.email,
+                    "roleId": user.role_id,
+                    "roleName": user_role_name,
+                    "role": user_role_name.lower(),
+                    "isActive": user.is_active,
                     "createdAt": created_at_str,
                 },
                 "pageAccess": page_access,
@@ -390,33 +435,50 @@ def google_auth():
         )
 
 
+def check_username():
+    """Checks whether a proposed username is available and valid globally."""
+    username = (request.args.get("username") or "").strip()
+    if not username:
+        return success({"available": False, "reason": "Username is required"})
+    try:
+        validate_username(username)
+    except Exception as e:
+        msg = e.message if hasattr(e, "message") else str(e)
+        return success({"available": False, "reason": msg})
+    
+    with get_session() as session:
+        existing = session.query(User).filter(func.lower(User.username) == func.lower(username)).first()
+        if existing:
+            return success({"available": False, "reason": "Username is already taken"})
+        return success({"available": True, "username": username})
+
+
 @token_required
 def verify_session():
-    """Validates the current session token with the database using Stored Procedure."""
+    """Validates the current session token with the database."""
     user_id = g.current_user_id
 
     with get_session() as session:
-        user = session.execute(
-            text("CALL sp_verify_user_session(:user_id)"),
-            {"user_id": user_id}
-        ).mappings().first()
+        user = session.get(User, user_id)
 
-        if not user or not user["is_active"]:
+        if not user or not user.is_active:
             raise UnauthorizedError("Session invalid or account inactive", code="SESSION_INVALID")
 
-        page_access = _get_page_access(session, user["role_name"])
+        role_name = user.role.role_name if user.role else "STUDENT"
+        page_access = _get_page_access(session, role_name)
 
         return success(
             {
                 "valid": True,
                 "user": {
-                    "id": user["id"],
-                    "name": user["name"],
-                    "email": user["email"],
-                    "roleId": user["role_id"],
-                    "roleName": user["role_name"],
-                    "role": user["role_name"],
-                    "isActive": user["is_active"],
+                    "id": user.id,
+                    "name": user.name,
+                    "username": user.username,
+                    "email": user.email,
+                    "roleId": user.role_id,
+                    "roleName": role_name,
+                    "role": role_name.lower(),
+                    "isActive": user.is_active,
                 },
                 "pageAccess": page_access,
             },
