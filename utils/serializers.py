@@ -1,6 +1,6 @@
 """Serializers that produce the exact camelCase shapes the frontend's
 types.ts already defines, so the React components need no restructuring."""
-from model.models import Student, ExamSubmission, LearningPathNode, Badge, Misconception
+from model.models import Student, ExamSubmission, LearningPathNode, Badge, Misconception, AuthorMaster, CategoryMaster, Blog
 
 
 def student_to_child_account(student: Student, badge_ids: list[str] | None = None) -> dict:
@@ -166,4 +166,58 @@ def misconception_to_dict(m: Misconception) -> dict:
         "evidence": m.evidence,
         "severity": m.severity,
         "status": m.status,
+    }
+
+def blog_to_dict(blog: Blog) -> dict:
+    return {
+        "id": blog.id,
+        "title": blog.title,
+        "heading": blog.heading or blog.title,
+        "introduction": blog.introduction or "",
+        "content": blog.content or "",
+        "contentPreview": (blog.introduction or blog.content or "")[:240],
+        "subcategory": blog.subcategory or "",
+        "imageUrl": blog.image_url or "",
+        "contentImages": blog.content_images or [],
+        "isPinned": bool(blog.is_pinned),
+        "isPost": bool(blog.is_post),
+        "tags": blog.tags or [],
+        "metaTitle": blog.meta_title or "",
+        "metaDescription": blog.meta_description or "",
+        "metaKeywords": blog.meta_keywords or "",
+        "canonicalUrl": blog.canonical_url or "",
+        "authorId": blog.author_id,
+        "author": blog.author.name if blog.author else None,
+        "authorName": blog.author.name if blog.author else None,
+        "categoryId": blog.category_id,
+        "category": blog.category.name if blog.category else None,
+        "status": blog.status,
+        "date": blog.date.strftime("%b %d, %Y") if blog.date else None,
+        "isoDate": blog.date.isoformat() if blog.date else None,
+        "createdAt": blog.created_at.isoformat() if blog.created_at else None,
+        "updatedAt": blog.updated_at.isoformat() if blog.updated_at else None,
+    }
+
+
+def category_to_dict(cat: CategoryMaster, count: int = 0) -> dict:
+    return {
+        "id": cat.id,
+        "name": cat.name,
+        "isActive": cat.is_active,
+        "status": "Active" if cat.is_active else "Inactive",
+        "count": count,
+        "items": count,
+        "createdAt": cat.created_at.isoformat() if cat.created_at else None,
+        "updatedAt": cat.updated_at.isoformat() if cat.updated_at else None,
+    }
+
+
+def author_to_dict(author: AuthorMaster, count: int = 0) -> dict:
+    return {
+        "id": author.id,
+        "name": author.name,
+        "isActive": author.is_active,
+        "count": count,
+        "createdAt": author.created_at.isoformat() if author.created_at else None,
+        "updatedAt": author.updated_at.isoformat() if author.updated_at else None,
     }

@@ -3,6 +3,7 @@
 app.py defines all API route endpoints explicitly with @app.route
 and delegates execution directly to their respective controller functions.
 """
+from flask import send_from_directory
 import time
 
 from flask import Flask, g, request
@@ -22,6 +23,7 @@ from controller import (
     teacher_controller,
     upload_file_controller,
     chat_controller,
+    blog_controller,
 )
 from middleware.dbContext import register_db_teardown
 from middleware.errorMiddleware import register_error_handlers
@@ -348,9 +350,64 @@ def create_app() -> Flask:
     def api_files_upload():
         return upload_file_controller.upload_file()
 
+    @app.route("/api/v1/files/upload-image", methods=["POST"])
+    def api_files_upload_image():
+        return upload_file_controller.upload_blog_image()
+
+    @app.route("/uploads/<path:filename>", methods=["GET"])
+    def uploaded_file(filename):
+        return send_from_directory(config.UPLOAD_DIR, filename)
+
     @app.route("/api/v1/files/<document_id>", methods=["GET"])
     def api_files_get_status(document_id):
         return upload_file_controller.get_document_status(document_id)
+
+    # ============================================================
+    # 13. Blog Endpoints
+    # ============================================================
+    @app.route("/api/v1/blogs", methods=["GET"])
+    def api_blog_list():
+        return blog_controller.list_blogs()
+
+    @app.route("/api/v1/blogs/<int:blog_id>", methods=["GET"])
+    def api_blog_get(blog_id):
+        return blog_controller.get_blog(blog_id)
+
+    @app.route("/api/v1/blogs", methods=["POST"])
+    def api_blog_create():
+        return blog_controller.create_blog()
+
+    @app.route("/api/v1/blogs/<int:blog_id>", methods=["PUT"])
+    def api_blog_update(blog_id):
+        return blog_controller.update_blog(blog_id)
+
+    @app.route("/api/v1/blogs/<int:blog_id>", methods=["DELETE"])
+    def api_blog_delete(blog_id):
+        return blog_controller.delete_blog(blog_id)
+
+    @app.route("/api/v1/blogs/categories", methods=["GET"])
+    def api_blog_list_categories():
+        return blog_controller.list_categories()
+
+    @app.route("/api/v1/blogs/categories", methods=["POST"])
+    def api_blog_create_category():
+        return blog_controller.create_category()
+
+    @app.route("/api/v1/blogs/categories/<int:category_id>", methods=["PUT"])
+    def api_blog_update_category(category_id):
+        return blog_controller.update_category(category_id)
+
+    @app.route("/api/v1/blogs/categories/<int:category_id>", methods=["DELETE"])
+    def api_blog_delete_category(category_id):
+        return blog_controller.delete_category(category_id)
+
+    @app.route("/api/v1/blogs/authors", methods=["GET"])
+    def api_blog_list_authors():
+        return blog_controller.list_authors()
+
+    @app.route("/api/v1/blogs/authors", methods=["POST"])
+    def api_blog_create_author():
+        return blog_controller.create_author()
 
     return app
 

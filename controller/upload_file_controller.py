@@ -1,4 +1,8 @@
+import os
+from uuid import uuid4
+
 from flask import request, g
+from werkzeug.utils import secure_filename
 
 from database.dbConnection import get_session
 from helper.rag_ingestion import ingest_document
@@ -7,6 +11,26 @@ from middleware.roleMiddleware import roles_required
 from model.models import Document
 from utils.errors import ValidationError
 from utils.response import success
+from utils.config import config
+
+
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+
+@token_required
+@roles_required("ADMIN", "SUPER_ADMIN", "AUTHOR")
+def upload_blog_image():
+    if "file" not in request.files:
+        raise ValidationError("No image file supplied")
+    image = request.files["file"]
+    if not image.filename or image.mimetype not in ALLOWED_IMAGE_TYPES:
+        raise ValidationError("Only JPG, PNG, WEBP, and GIF images are supported")
+
+    filename = f"{uuid4().hex}_{secure_filename(image.filename)}"
+    upload_dir = os.path.join(config.UPLOAD_DIR, "blogs")
+    os.makedirs(upload_dir, exist_ok=True)
+    image.save(os.path.join(upload_dir, filename))
+    return success({"url": f"/uploads/blogs/{filename}", "filename": filename}, 201)
 
 
 @token_required
@@ -48,4 +72,3 @@ def get_document_status(document_id):
             "id": document.id, "filename": document.filename, "status": document.status,
             "board": document.board, "classGrade": document.class_grade, "subject": document.subject,
         })
-

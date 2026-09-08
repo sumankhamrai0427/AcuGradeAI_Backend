@@ -489,3 +489,53 @@ class ClassMaster(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class AuthorMaster(Base):
+    __tablename__ = "author_master"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CategoryMaster(Base):
+    __tablename__ = "category_master"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ------------------------------------------------------------
+# 12. Blogs
+# ------------------------------------------------------------
+class Blog(Base):
+    __tablename__ = "blogs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(255), nullable=False)
+    author_id = Column(Integer, ForeignKey("author_master.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("category_master.id"), nullable=False)
+    heading = Column(String(255), nullable=True)
+    introduction = Column(Text, nullable=True)
+    content = Column(Text, nullable=True)
+    subcategory = Column(String(120), nullable=True)
+    image_url = Column(String(500), nullable=True)
+    content_images = Column(JSON, nullable=True)
+    is_pinned = Column(Boolean, default=False, nullable=False)
+    is_post = Column(Boolean, default=True, nullable=False)
+    tags = Column(JSON, nullable=True)
+    meta_title = Column(String(255), nullable=True)
+    meta_description = Column(Text, nullable=True)
+    meta_keywords = Column(Text, nullable=True)
+    canonical_url = Column(String(500), nullable=True)
+    status = Column(Enum("Published", "Draft", name="blog_status"), default="Draft")
+    date = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    author = relationship("AuthorMaster")
+    category = relationship("CategoryMaster")
