@@ -17,6 +17,7 @@ from utils.response import success
 from utils.security import decode_token
 from utils.serializers import blog_to_dict, category_to_dict, author_to_dict
 from utils.validators import require_fields
+from utils.audit_helper import log_audit
 
 
 def _admin_required(fn):
@@ -255,6 +256,16 @@ def create_blog():
         session.add(blog)
         session.flush()
 
+        log_audit(
+            session,
+            action="BLOG_CREATED",
+            user_id=getattr(g, "current_user_id", None),
+            entity_type="BLOG",
+            entity_id=str(blog.id),
+            request=request,
+        )
+        session.commit()
+
         # Re-query with joined relationships
         blog = session.get(Blog, blog.id)
         return success(blog_to_dict(blog), status_code=201, message="Blog post created successfully")
@@ -333,6 +344,16 @@ def update_blog(blog_id: int):
         blog.updated_at = datetime.utcnow()
         session.flush()
 
+        log_audit(
+            session,
+            action="BLOG_UPDATED",
+            user_id=getattr(g, "current_user_id", None),
+            entity_type="BLOG",
+            entity_id=str(blog.id),
+            request=request,
+        )
+        session.commit()
+
         blog = session.get(Blog, blog.id)
         return success(blog_to_dict(blog), message="Blog post updated successfully")
 
@@ -345,6 +366,17 @@ def delete_blog(blog_id: int):
         if not blog:
             raise NotFoundError("Blog not found")
         session.delete(blog)
+
+        log_audit(
+            session,
+            action="BLOG_DELETED",
+            user_id=getattr(g, "current_user_id", None),
+            entity_type="BLOG",
+            entity_id=str(blog_id),
+            request=request,
+        )
+        session.commit()
+
         return success({"deleted": True, "id": blog_id}, message="Blog post deleted successfully")
 
 

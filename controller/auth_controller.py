@@ -13,6 +13,7 @@ from model.models import User, Role, Parent, Student
 from utils.config import config
 from utils.errors import AppError, UnauthorizedError
 from utils.response import success
+from utils.audit_helper import log_audit
 from utils.security import (
     hash_password, verify_password, create_access_token, create_refresh_token,
     decode_token, verify_pin,
@@ -36,34 +37,68 @@ def _issue_tokens(session, user_id: int, role_name: str) -> dict:
     refresh_token = create_refresh_token(user_id, normalized_role)
     expires_at = datetime.utcnow() + timedelta(days=config.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
 
-    session.execute(
-        text("CALL sp_save_refresh_token(:user_id, :token_hash, :expires_at)"),
-        {
-            "user_id": user_id,
-            "token_hash": _hash_token(refresh_token),
-            "expires_at": expires_at,
-        }
-    )
+    try:
+        session.execute(
+            text("CALL sp_save_refresh_token(:user_id, :token_hash, :expires_at)"),
+            {
+                "user_id": user_id,
+                "token_hash": _hash_token(refresh_token),
+                "expires_at": expires_at,
+            }
+        )
+    except Exception:
+        from model.models import RefreshToken
+        try:
+            token_rec = RefreshToken(
+                user_id=user_id,
+                token_hash=_hash_token(refresh_token),
+                expires_at=expires_at,
+            )
+            session.add(token_rec)
+            session.flush()
+        except Exception:
+            pass
     return {"accessToken": access_token, "refreshToken": refresh_token}
 
 
 def get_page_access_for_role(session, role_name: str) -> list[dict]:
-    rows = session.execute(
-        text("CALL sp_get_role_menu_permissions(:role_name)"),
-        {"role_name": role_name}
-    ).mappings().all()
+    try:
+        rows = session.execute(
+            text("CALL sp_get_role_menu_permissions(:role_name)"),
+            {"role_name": role_name}
+        ).mappings().all()
 
-    return [
-        {
-            "id": r["id"],
-            "pageName": r["page_name"],
-            "pageRoute": r["page_route"],
-            "icon": r["icon"],
-            "menuOrder": r["menu_order"],
-            "isActive": r["is_active"],
-        }
-        for r in rows
-    ]
+        return [
+            {
+                "id": r["id"],
+                "pageName": r["page_name"],
+                "pageRoute": r["page_route"],
+                "icon": r["icon"],
+                "menuOrder": r["menu_order"],
+                "isActive": r["is_active"],
+            }
+            for r in rows
+        ]
+    except Exception:
+        from model.models import Role, RolePageAccess
+        role = session.query(Role).filter(func.lower(Role.role_name) == func.lower(role_name)).first()
+        if not role:
+            return []
+        items = session.query(RolePageAccess).filter(
+            RolePageAccess.role_id == role.id,
+            RolePageAccess.is_active == True
+        ).order_by(RolePageAccess.menu_order).all()
+        return [
+            {
+                "id": item.id,
+                "pageName": item.page_name,
+                "pageRoute": item.page_route,
+                "icon": item.icon,
+                "menuOrder": item.menu_order,
+                "isActive": item.is_active,
+            }
+            for item in items
+        ]
 
 
 _get_page_access = get_page_access_for_role
@@ -170,6 +205,15 @@ def login():
             )
 
         if not verify_password(password, user.password_hash):
+            log_audit(
+                session,
+                action="LOGIN_FAILED",
+                user_id=user.id if user else None,
+                entity_type="USER",
+                entity_id=username,
+                request=request,
+            )
+            session.commit()
             raise UnauthorizedError("Invalid username or password", code="INVALID_CREDENTIALS")
         if not user.is_active:
             raise UnauthorizedError("This account is not active", code="ACCOUNT_INACTIVE")
@@ -177,6 +221,15 @@ def login():
         role_name = user.role.role_name if user.role else "STUDENT"
         tokens = _issue_tokens(session, user.id, role_name)
         page_access = _get_page_access(session, role_name)
+
+        log_audit(
+            session,
+            action="LOGIN_SUCCESS",
+            user_id=user.id,
+            entity_type="USER",
+            entity_id=user.name,
+            request=request,
+        )
         session.commit()
 
         # Send login notification email
@@ -217,44 +270,44 @@ def admin_login():
     email = payload["email"].strip()
 
     with get_session() as session:
-        user = None
-        try:
-            user = session.execute(
-                text("CALL sp_get_user_for_login(:email)"),
-                {"email": email}
-            ).mappings().first()
-        except Exception:
-            # Direct query fallback if stored procedure is unavailable
-            from model.models import User, Role
-            user_record = session.query(User).filter(
-                (User.email == email) | (User.name == email)
-            ).first()
-            if user_record:
-                role_record = session.query(Role).filter(Role.id == user_record.role_id).first()
-                user = {
-                    "id": user_record.id,
-                    "name": user_record.name,
-                    "email": user_record.email,
-                    "password_hash": user_record.password_hash,
-                    "role_id": user_record.role_id,
-                    "role_name": role_record.role_name if role_record else "Admin",
-                    "is_active": user_record.is_active,
-                }
+        user = session.query(User).filter(
+            (func.lower(User.email) == func.lower(email)) |
+            (func.lower(User.name) == func.lower(email)) |
+            (func.lower(User.username) == func.lower(email))
+        ).first()
 
-        if not user or not verify_password(payload["password"], user["password_hash"]):
+        if not user or not user.password_hash or not verify_password(payload["password"], user.password_hash):
+            log_audit(
+                session,
+                action="ADMIN_LOGIN_FAILED",
+                entity_type="USER",
+                entity_id=email,
+                request=request,
+            )
+            session.commit()
             raise UnauthorizedError("Invalid email or password", code="INVALID_CREDENTIALS")
-        if not user["is_active"]:
+
+        if not user.is_active:
             raise UnauthorizedError("This account is not active", code="ACCOUNT_INACTIVE")
 
-        role_name = (user["role_name"] or "").strip().upper()
+        role_name = (user.role.role_name if user.role else "ADMIN").strip().upper()
         if role_name not in ["ADMIN", "SUPER_ADMIN"]:
-            raise UnauthorizedError("Access denied. Admin credentials required.", code="FORBIDDEN_ROLE")
+            raise UnauthorizedError("Access restricted to administrators", code="FORBIDDEN_ROLE")
 
-        tokens = _issue_tokens(session, user["id"], user["role_name"])
+        tokens = _issue_tokens(session, user.id, role_name)
         try:
-            page_access = _get_page_access(session, user["role_name"])
+            page_access = _get_page_access(session, role_name)
         except Exception:
             page_access = []
+
+        log_audit(
+            session,
+            action="ADMIN_LOGIN_SUCCESS",
+            user_id=user.id,
+            entity_type="USER",
+            entity_id=user.name,
+            request=request,
+        )
         session.commit()
 
         return success(
@@ -268,13 +321,14 @@ def admin_login():
                 "accessToken": tokens["accessToken"],
                 "refreshToken": tokens["refreshToken"],
                 "user": {
-                    "id": user["id"],
-                    "name": user["name"],
-                    "email": user["email"],
-                    "roleId": user["role_id"],
-                    "roleName": user["role_name"],
-                    "role": user["role_name"],
-                    "isActive": user["is_active"],
+                    "id": user.id,
+                    "name": user.name,
+                    "username": user.username,
+                    "email": user.email,
+                    "roleId": user.role_id,
+                    "roleName": role_name,
+                    "role": role_name.lower(),
+                    "isActive": user.is_active,
                 },
                 "pageAccess": page_access,
             },
@@ -411,6 +465,15 @@ def google_auth():
         user_role_name = user.role.role_name if user.role else role_name
         tokens = _issue_tokens(session, user.id, user_role_name)
         page_access = _get_page_access(session, user_role_name)
+
+        log_audit(
+            session,
+            action="GOOGLE_LOGIN_SUCCESS",
+            user_id=user.id,
+            entity_type="USER",
+            entity_id=str(user.id),
+            request=request,
+        )
         session.commit()
 
         # Send Google login notification email
@@ -557,6 +620,16 @@ def child_login():
 
         access_token = create_access_token(student["id"], "STUDENT")
         page_access = _get_page_access(session, "STUDENT")
+
+        log_audit(
+            session,
+            action="CHILD_PIN_LOGIN",
+            user_id=student["id"],
+            entity_type="STUDENT",
+            entity_id=str(student["id"]),
+            request=request,
+        )
+        session.commit()
 
         return success(
             {

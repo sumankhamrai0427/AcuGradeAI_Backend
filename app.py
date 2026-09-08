@@ -335,6 +335,10 @@ def create_app() -> Flask:
     def api_admin_list_students():
         return admin_controller.list_students()
 
+    @app.route("/api/v1/admin/audit-logs", methods=["GET"])
+    def api_admin_list_audit_logs():
+        return admin_controller.list_audit_logs()
+
 
     # ============================================================
     # 12. Chat Endpoints

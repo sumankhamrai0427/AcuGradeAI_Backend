@@ -10,6 +10,7 @@ from middleware.roleMiddleware import roles_required, assert_owns_student
 from model.models import Parent, Student, User, Role, ExamSubmission, LearningPathNode, StudentBadge
 from utils.errors import AppError, NotFoundError
 from utils.response import success
+from utils.audit_helper import log_audit
 from utils.security import hash_pin, hash_password
 from utils.serializers import student_to_child_account, submission_to_dict, learning_path_node_to_dict
 from utils.constants import BOARD_CLASS_MAPPING
@@ -217,6 +218,14 @@ def add_child():
             daily_exams_taken_today=0,
         )
         session.add(student)
+        log_audit(
+            session,
+            action="CHILD_CREATED",
+            user_id=g.current_user_id,
+            entity_type="STUDENT_PROFILE",
+            entity_id=str(student.id),
+            request=request,
+        )
         session.commit()
 
         return success(student_to_child_account(student, []), 201)
@@ -248,6 +257,16 @@ def update_child(student_id):
             validate_pin(payload["pin"])
             student.pin_hash = hash_pin(payload["pin"])
 
+        log_audit(
+            session,
+            action="CHILD_UPDATED",
+            user_id=g.current_user_id,
+            entity_type="STUDENT_PROFILE",
+            entity_id=str(student.id),
+            request=request,
+        )
+        session.commit()
+
         return success(student_to_child_account(student, _badge_ids_for(session, student.id)))
 
 
@@ -261,6 +280,15 @@ def delete_child(student_id):
         session.delete(student)
         if user:
             session.delete(user)
+        log_audit(
+            session,
+            action="CHILD_DELETED",
+            user_id=g.current_user_id,
+            entity_type="STUDENT_PROFILE",
+            entity_id=str(s_id),
+            request=request,
+        )
+        session.commit()
         return success({"deleted": True})
 
 

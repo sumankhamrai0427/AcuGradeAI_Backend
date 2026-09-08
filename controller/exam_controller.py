@@ -14,6 +14,7 @@ from middleware.roleMiddleware import assert_owns_student
 from model.models import Exam, ExamSubmission, QuestionEvaluation, DiagnosticAnalysis, Student, Parent
 from utils.errors import AppError, NotFoundError, ValidationError
 from utils.response import success
+from utils.audit_helper import log_audit
 from utils.serializers import submission_to_dict
 from utils.validators import require_fields, validate_board, validate_class_grade, validate_board_class, validate_subject, validate_difficulty
 
@@ -65,6 +66,16 @@ def generate_exam():
 
         student.daily_exams_taken_today = (student.daily_exams_taken_today or 0) + 1
         student.last_exam_date = date.today()
+
+        log_audit(
+            session,
+            action="EXAM_GENERATED",
+            user_id=g.current_user_id,
+            entity_type="EXAM",
+            entity_id=str(exam.id),
+            request=request,
+        )
+        session.commit()
 
         return success(
             {"exam": exam_generator.exam_to_public_dict(exam)},
@@ -174,7 +185,16 @@ def generate_quick_test():
 
         student.daily_exams_taken_today = (student.daily_exams_taken_today or 0) + 1
         student.last_exam_date = date.today()
-        session.flush()
+
+        log_audit(
+            session,
+            action="QUICK_EXAM_GENERATED",
+            user_id=g.current_user_id,
+            entity_type="EXAM",
+            entity_id=str(exam.id),
+            request=request,
+        )
+        session.commit()
 
         return success(
             {
@@ -278,6 +298,16 @@ def submit_exam(exam_id):
         update_learning_path_after_submission(
             session, student.id, exam.subject, marks_obtained, analysis["kGraphInsights"]
         )
+
+        log_audit(
+            session,
+            action="EXAM_SUBMITTED",
+            user_id=g.current_user_id,
+            entity_type="EXAM_SUBMISSION",
+            entity_id=str(submission.id),
+            request=request,
+        )
+        session.commit()
 
         return success({
             "submission": {
