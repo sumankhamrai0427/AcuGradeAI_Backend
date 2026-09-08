@@ -5,6 +5,8 @@ import jwt
 from flask import request, g
 from sqlalchemy import text, func
 
+from .email_controller import send_email, send_registration_email, send_login_email
+
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
 from model.models import User, Role, Parent, Student
@@ -113,6 +115,9 @@ def register():
         page_access = _get_page_access(session, role_name)
         session.commit()
 
+        # Send registration welcome email
+        send_registration_email(to_email=user.email, name=user.name, username=user.username, role_name=role_name)
+
         return success(
             {
                 "tokens": {
@@ -173,6 +178,9 @@ def login():
         tokens = _issue_tokens(session, user.id, role_name)
         page_access = _get_page_access(session, role_name)
         session.commit()
+
+        # Send login notification email
+        send_login_email(to_email=user.email, name=user.name, login_type="Standard")
 
         return success(
             {
@@ -404,6 +412,9 @@ def google_auth():
         tokens = _issue_tokens(session, user.id, user_role_name)
         page_access = _get_page_access(session, user_role_name)
         session.commit()
+
+        # Send Google login notification email
+        send_login_email(to_email=user.email, name=user.name, login_type="Google")
 
         created_at_str = user.created_at.isoformat() if user.created_at else None
 
