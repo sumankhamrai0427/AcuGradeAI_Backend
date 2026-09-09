@@ -11,7 +11,8 @@ from helper.adaptive_learning_engine import update_learning_path_after_submissio
 from helper.evaluation_engine import evaluate_exam
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import assert_owns_student
-from model.models import Exam, ExamSubmission, QuestionEvaluation, DiagnosticAnalysis, Student, Parent
+from model.models import Exam, ExamSubmission, QuestionEvaluation, DiagnosticAnalysis, Student, Parent, ScheduledExam, Notification
+from controller.notification_controller import create_notification
 from utils.errors import AppError, NotFoundError, ValidationError
 from utils.response import success
 from utils.audit_helper import log_audit
@@ -43,6 +44,11 @@ def _reset_daily_quota_if_new_day(student: Student):
 def generate_exam():
     payload = request.get_json(force=True, silent=True) or {}
     require_fields(payload, ["board", "subject", "difficulty"])
+    from utils.constants import normalize_subject
+    raw_subject = str(payload.get("subject", "")).strip()
+    normalized_sub = normalize_subject(raw_subject)
+    payload["subject"] = normalized_sub
+
     validate_board(payload["board"])
     if payload.get("classGrade"):
         validate_class_grade(payload["classGrade"])
@@ -54,6 +60,32 @@ def generate_exam():
         target_class = payload.get("classGrade", student.class_grade)
         validate_board_class(payload["board"], target_class)
 
+        scheduled_exam_id = payload.get("scheduledExamId")
+        scheduled_exam = None
+        if scheduled_exam_id:
+            scheduled_exam = session.get(ScheduledExam, scheduled_exam_id)
+
+        if not scheduled_exam:
+            # Check for any active pending scheduled exam matching student and subject (including aliases)
+            allowed_subject_variants = {normalized_sub, raw_subject, "General Science" if normalized_sub == "Science" else normalized_sub}
+            scheduled_exam = (
+                session.query(ScheduledExam)
+                .filter(
+                    ScheduledExam.student_id == student.id,
+                    ScheduledExam.status == "PENDING",
+                    ScheduledExam.subject.in_(allowed_subject_variants)
+                )
+                .order_by(ScheduledExam.created_at.desc())
+                .first()
+            )
+
+        # Dynamic Question Count & Duration
+        req_q_count = payload.get("questionCount") or (scheduled_exam.question_count if scheduled_exam else None)
+        req_duration = payload.get("timeLimitMinutes") or (scheduled_exam.time_limit_minutes if scheduled_exam else None)
+        title = scheduled_exam.title if scheduled_exam else payload.get("title")
+
+        is_assigned_flag = bool(scheduled_exam or payload.get("scheduledExamId"))
+
         exam = exam_generator.generate_exam(
             session,
             student_id=student.id,
@@ -62,7 +94,16 @@ def generate_exam():
             class_grade=target_class,
             subject=payload["subject"],
             difficulty=payload["difficulty"],
+            question_count=int(req_q_count) if req_q_count else None,
+            time_limit_minutes=int(req_duration) if req_duration else None,
+            title=title,
+            is_assigned=is_assigned_flag,
         )
+
+        if scheduled_exam:
+            scheduled_exam.exam_id = exam.id
+            scheduled_exam.status = "IN_PROGRESS"
+            session.flush()
 
         student.daily_exams_taken_today = (student.daily_exams_taken_today or 0) + 1
         student.last_exam_date = date.today()
@@ -77,8 +118,12 @@ def generate_exam():
         )
         session.commit()
 
+        public_exam = exam_generator.exam_to_public_dict(exam)
+        if scheduled_exam:
+            public_exam["scheduledExamId"] = scheduled_exam.id
+
         return success(
-            {"exam": exam_generator.exam_to_public_dict(exam)},
+            {"exam": public_exam},
             201,
             source=exam.source,
         )
@@ -86,11 +131,13 @@ def generate_exam():
 
 @token_required
 def generate_quick_test():
-    """Generates a random 10-question Quick Diagnostic Test directly from DB
-    via Stored Procedure matching the student's registered Curriculum Board & Class Grade."""
+    """Generates a diagnostic test directly from DB or Engine matching
+    the student's registered Curriculum Board, Class Grade, and exact Subject/Question Count."""
     payload = request.get_json(force=True, silent=True) or {}
     if not payload.get("studentId") and request.args.get("studentId"):
         payload["studentId"] = request.args.get("studentId")
+
+    scheduled_exam_id = payload.get("scheduledExamId")
 
     with get_session() as session:
         student = _resolve_student_for_request(session, payload)
@@ -98,22 +145,114 @@ def generate_quick_test():
         is_kid = (student.class_grade or '').strip().lower() in ['class 1', 'class 2', 'class 3', 'class 4']
         default_limit = 5 if is_kid else 10
         limit = int(payload.get("limit", default_limit))
-        sp_rows = session.execute(
-            text("CALL sp_generate_quick_test_from_db(:student_id, :limit)"),
-            {"student_id": student.id, "limit": limit}
-        ).mappings().fetchall()
+        from utils.constants import normalize_subject
+        requested_subject = normalize_subject(str(payload.get("subject", "")).strip()) if payload.get("subject") else ""
+        requested_diff = str(payload.get("difficulty", "simple" if is_kid else "medium")).lower()
 
-        if not sp_rows:
-            raise NotFoundError("No diagnostic questions found in database for this student")
+        scheduled_exam = None
+        if scheduled_exam_id:
+            scheduled_exam = session.get(ScheduledExam, scheduled_exam_id)
+            if scheduled_exam:
+                limit = scheduled_exam.question_count
+                requested_subject = normalize_subject(scheduled_exam.subject)
+                requested_diff = scheduled_exam.difficulty
 
-        total_exam_marks = sum(int(r.get("marks") or 1) for r in sp_rows)
-        primary_subject = sp_rows[0].get("subject_name") or "General Assessment"
+        # If not specified, look for active pending scheduled exam for this student
+        if not scheduled_exam and not requested_subject:
+            scheduled_exam = (
+                session.query(ScheduledExam)
+                .filter(
+                    ScheduledExam.student_id == student.id,
+                    ScheduledExam.status == "PENDING"
+                )
+                .order_by(ScheduledExam.created_at.desc())
+                .first()
+            )
+            if scheduled_exam:
+                limit = scheduled_exam.question_count
+                requested_subject = scheduled_exam.subject
+                requested_diff = scheduled_exam.difficulty
+
+        sp_rows = []
+        # Try fetching questions for specific subject if requested
+        if requested_subject:
+            try:
+                sp_rows = session.execute(
+                    text("CALL sp_generate_exam_from_db(:board, :class_grade, :subject, :difficulty)"),
+                    {
+                        "board": student.target_board,
+                        "class_grade": student.class_grade,
+                        "subject": requested_subject,
+                        "difficulty": requested_diff or ("simple" if is_kid else "medium"),
+                    }
+                ).mappings().fetchall()
+            except Exception:
+                sp_rows = []
+
+        # If sp_rows is empty or doesn't have enough questions for the requested limit,
+        # fallback to the smart curriculum/fallback exam generator to guarantee exact count and subject
+        if not sp_rows or len(sp_rows) < limit:
+            exam_title = scheduled_exam.title if scheduled_exam else None
+            time_limit = scheduled_exam.time_limit_minutes if scheduled_exam else (10 if is_kid else 15)
+            exam = exam_generator.generate_exam(
+                session,
+                student_id=student.id,
+                student_name=student.user.name if student.user else "Student",
+                board=student.target_board,
+                class_grade=student.class_grade,
+                subject=requested_subject or ("General Science" if is_kid else "Mathematics"),
+                difficulty=requested_diff or ("simple" if is_kid else "medium"),
+                question_count=limit,
+                time_limit_minutes=time_limit,
+                title=exam_title,
+                is_assigned=bool(scheduled_exam),
+            )
+            if scheduled_exam:
+                scheduled_exam.exam_id = exam.id
+                scheduled_exam.status = "IN_PROGRESS"
+                session.flush()
+
+            student.daily_exams_taken_today = (student.daily_exams_taken_today or 0) + 1
+            student.last_exam_date = date.today()
+
+            log_audit(
+                session,
+                action="QUICK_EXAM_GENERATED",
+                user_id=g.current_user_id,
+                entity_type="EXAM",
+                entity_id=str(exam.id),
+                request=request,
+            )
+            session.commit()
+            return success(
+                {
+                    "exam": {
+                        **exam_generator.exam_to_public_dict(exam),
+                        "scheduledExamId": scheduled_exam.id if scheduled_exam else None,
+                    },
+                    "student": {
+                        "id": student.id,
+                        "name": student.user.name if student.user else "",
+                        "avatar": student.avatar,
+                        "classGrade": student.class_grade,
+                        "targetBoard": student.target_board,
+                    }
+                },
+                201,
+                source="rag-engine-curated"
+            )
+
+        # Slice to exact limit
+        sp_rows = list(sp_rows)[:limit]
+        total_exam_marks = len(sp_rows)
+        primary_subject = requested_subject or sp_rows[0].get("subject_name") or "General Assessment"
+        
         if is_kid:
-            title = f"{student.class_grade} {student.target_board} Adventure Challenge ({total_exam_marks} Marks)"
-            time_limit = 10
+            title = scheduled_exam.title if scheduled_exam else f"{student.class_grade} {student.target_board} Adventure Challenge ({total_exam_marks} Marks)"
+            time_limit = (scheduled_exam.time_limit_minutes if scheduled_exam else 10)
         else:
-            title = f"{student.class_grade} {student.target_board} Quick Diagnostic Assessment ({total_exam_marks} Marks)"
-            time_limit = 15
+            title = scheduled_exam.title if scheduled_exam else f"{student.class_grade} {student.target_board} Quick Diagnostic Assessment ({total_exam_marks} Marks)"
+            time_limit = (scheduled_exam.time_limit_minutes if scheduled_exam else 15)
 
         from model.models import Question
         exam = Exam(
@@ -123,7 +262,7 @@ def generate_quick_test():
             board=student.target_board,
             class_grade=student.class_grade,
             subject=primary_subject,
-            difficulty="simple" if is_kid else "medium",
+            difficulty=requested_diff if requested_diff in ["simple", "medium", "hard"] else ("simple" if is_kid else "medium"),
             total_marks=total_exam_marks,
             question_count=len(sp_rows),
             time_limit_minutes=time_limit,
@@ -146,7 +285,6 @@ def generate_quick_test():
             elif isinstance(raw_options, list):
                 parsed_options = raw_options
 
-            # Map type to valid Enum: "mcq", "objective", "numerical", "logical"
             raw_type = (row.get("question_type") or "").lower()
             if parsed_options and len(parsed_options) > 1:
                 q_type = "mcq"
@@ -157,8 +295,7 @@ def generate_quick_test():
             else:
                 q_type = "objective"
 
-            # Map difficulty to valid Enum: "simple", "medium", "hard"
-            raw_diff = (row.get("difficulty") or "medium").lower()
+            raw_diff = (row.get("difficulty") or requested_diff or "medium").lower()
             if "easy" in raw_diff or "sim" in raw_diff:
                 q_diff = "simple"
             elif "hard" in raw_diff or "adv" in raw_diff:
@@ -176,12 +313,17 @@ def generate_quick_test():
                     correct_answer=str(row.get("correct_answer") or ""),
                     explanation=row.get("explanation") or "Step-by-step diagnostic solution.",
                     difficulty=q_diff,
-                    marks=int(row.get("marks") or 1),
+                    marks=1,
                     topic=row.get("topic_name") or primary_subject,
                     reference_links=[],
                     hint=f"Focus on {row.get('topic_name') or primary_subject} fundamentals.",
                 )
             )
+
+        if scheduled_exam:
+            scheduled_exam.exam_id = exam.id
+            scheduled_exam.status = "IN_PROGRESS"
+            session.flush()
 
         student.daily_exams_taken_today = (student.daily_exams_taken_today or 0) + 1
         student.last_exam_date = date.today()
@@ -198,7 +340,10 @@ def generate_quick_test():
 
         return success(
             {
-                "exam": exam_generator.exam_to_public_dict(exam),
+                "exam": {
+                    **exam_generator.exam_to_public_dict(exam),
+                    "scheduledExamId": scheduled_exam.id if scheduled_exam else None,
+                },
                 "student": {
                     "id": student.id,
                     "name": student.user.name if student.user else "",
@@ -299,6 +444,57 @@ def submit_exam(exam_id):
             session, student.id, exam.subject, marks_obtained, analysis["kGraphInsights"]
         )
 
+        # Check if this matches a parent-scheduled exam
+        scheduled_exam_id = payload.get("scheduledExamId")
+        scheduled_exam = None
+        if scheduled_exam_id:
+            scheduled_exam = session.get(ScheduledExam, scheduled_exam_id)
+
+        if not scheduled_exam:
+            scheduled_exam = (
+                session.query(ScheduledExam)
+                .filter(
+                    ScheduledExam.student_id == student.id,
+                    ScheduledExam.status.in_(["PENDING", "IN_PROGRESS"]),
+                )
+                .order_by(ScheduledExam.created_at.desc())
+                .first()
+            )
+        if scheduled_exam:
+            scheduled_exam.status = "SUBMITTED"
+            scheduled_exam.submission_id = submission.id
+            scheduled_exam.exam_id = exam.id
+
+            # Mark student's assigned notification as read
+            session.query(Notification).filter(
+                Notification.user_id == student.id,
+                Notification.type == "EXAM_ASSIGNED",
+                Notification.is_read == False
+            ).update({"is_read": True}, synchronize_session=False)
+
+        # Send Real-Time Notification to Parent
+        if student.parent_id:
+            notif_title = f"{student_name} completed {exam.subject} Exam! 🎯" if scheduled_exam else f"{student_name} completed an Exam! 🎯"
+            create_notification(
+                session=session,
+                user_id=student.parent_id,
+                sender_id=student.id,
+                notif_type="EXAM_SUBMITTED",
+                title=notif_title,
+                message=f"{student_name} completed the {exam.subject} test and scored {marks_obtained}/{exam.total_marks} ({accuracy_percentage}%).",
+                action_url="/reports",
+                metadata_json={
+                    "submissionId": str(submission.id),
+                    "examId": str(exam.id),
+                    "studentId": student.id,
+                    "studentName": student_name,
+                    "subject": exam.subject,
+                    "marksObtained": marks_obtained,
+                    "totalMarks": exam.total_marks,
+                    "accuracy": accuracy_percentage,
+                }
+            )
+
         log_audit(
             session,
             action="EXAM_SUBMITTED",
@@ -308,6 +504,7 @@ def submit_exam(exam_id):
             request=request,
         )
         session.commit()
+
 
         return success({
             "submission": {

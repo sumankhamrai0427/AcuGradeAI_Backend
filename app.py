@@ -24,6 +24,7 @@ from controller import (
     upload_file_controller,
     chat_controller,
     blog_controller,
+    notification_controller,
 )
 from middleware.dbContext import register_db_teardown
 from middleware.errorMiddleware import register_error_handlers
@@ -160,6 +161,33 @@ def create_app() -> Flask:
     def api_parent_child_learning_path(student_id):
         return parent_controller.child_learning_path(student_id)
 
+    @app.route("/api/v1/parents/schedule-exam", methods=["POST"])
+    def api_parent_schedule_exam():
+        return parent_controller.schedule_exam()
+
+    @app.route("/api/v1/parents/scheduled-exams", methods=["GET"])
+    def api_parent_list_scheduled_exams():
+        return parent_controller.list_scheduled_exams()
+
+    @app.route("/api/v1/parents/scheduled-exams/<scheduled_exam_id>", methods=["DELETE"])
+    def api_parent_delete_scheduled_exam(scheduled_exam_id):
+        return parent_controller.delete_scheduled_exam(scheduled_exam_id)
+
+    # ============================================================
+    # 3.5 Notification Endpoints
+    # ============================================================
+    @app.route("/api/v1/notifications", methods=["GET"])
+    def api_get_notifications():
+        return notification_controller.get_notifications()
+
+    @app.route("/api/v1/notifications/<notification_id>/read", methods=["PATCH"])
+    def api_mark_notification_read(notification_id):
+        return notification_controller.mark_as_read(notification_id)
+
+    @app.route("/api/v1/notifications/read-all", methods=["POST"])
+    def api_mark_all_notifications_read():
+        return notification_controller.mark_all_as_read()
+
     # ============================================================
     # 4. Student Endpoints
     # ============================================================
@@ -167,6 +195,11 @@ def create_app() -> Flask:
     @app.route("/api/v1/students/dashboard", methods=["GET"])
     def api_student_dashboard():
         return student_controller.get_dashboard()
+
+    @app.route("/api/v1/students/assigned-exams", methods=["GET"])
+    def api_student_assigned_exams():
+        return student_controller.get_assigned_exams()
+
 
     @app.route("/api/v1/students/me", methods=["GET"])
     def api_student_get_me():
@@ -330,6 +363,14 @@ def create_app() -> Flask:
     @app.route("/api/v1/admin/users", methods=["GET"])
     def api_admin_list_users():
         return admin_controller.list_users()
+
+    @app.route("/api/v1/admin/users/<int:user_id>", methods=["PUT"])
+    def api_admin_update_user(user_id):
+        return admin_controller.update_user(user_id)
+
+    @app.route("/api/v1/admin/users/<int:user_id>", methods=["DELETE"])
+    def api_admin_delete_user(user_id):
+        return admin_controller.delete_user(user_id)
 
     @app.route("/api/v1/admin/students", methods=["GET"])
     def api_admin_list_students():

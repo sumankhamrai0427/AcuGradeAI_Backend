@@ -7,7 +7,8 @@ from sqlalchemy import text, func
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import roles_required, assert_owns_student
-from model.models import Parent, Student, User, Role, ExamSubmission, LearningPathNode, StudentBadge
+from datetime import datetime
+from model.models import Parent, Student, User, Role, ExamSubmission, LearningPathNode, StudentBadge, ScheduledExam
 from utils.errors import AppError, NotFoundError
 from utils.response import success
 from utils.audit_helper import log_audit
@@ -322,3 +323,161 @@ def child_learning_path(student_id):
         assert_owns_student(session, s_id, g.current_user_id)
         nodes = session.query(LearningPathNode).filter(LearningPathNode.student_id == s_id).all()
         return success([learning_path_node_to_dict(n) for n in nodes])
+
+
+def scheduled_exam_to_dict(se: ScheduledExam) -> dict:
+    return {
+        "id": se.id,
+        "parentId": se.parent_id,
+        "studentId": se.student_id,
+        "studentName": se.student.user.name if se.student and se.student.user else "Student",
+        "studentAvatar": se.student.avatar if se.student else "🧑‍🎓",
+        "title": se.title,
+        "subject": se.subject,
+        "chapterTopic": se.chapter_topic,
+        "board": se.board,
+        "classGrade": se.class_grade,
+        "difficulty": se.difficulty,
+        "questionCount": se.question_count,
+        "timeLimitMinutes": se.time_limit_minutes,
+        "scheduledAt": se.scheduled_at.isoformat() if se.scheduled_at else None,
+        "dueDate": se.due_date.isoformat() if se.due_date else None,
+        "parentInstructions": se.parent_instructions,
+        "status": se.status,
+        "examId": se.exam_id,
+        "submissionId": se.submission_id,
+        "score": se.submission.marks_obtained if se.submission else None,
+        "totalMarks": se.submission.total_marks if se.submission else None,
+        "accuracy": float(se.submission.accuracy_percentage) if se.submission and se.submission.accuracy_percentage is not None else None,
+        "createdAt": se.created_at.isoformat() if se.created_at else None,
+    }
+
+
+@token_required
+@roles_required("PARENT")
+def schedule_exam():
+    """Parent schedules a customized exam for their child."""
+    payload = request.get_json(force=True, silent=True) or {}
+    require_fields(payload, ["studentId", "subject"])
+
+    student_id = int(payload["studentId"])
+    from utils.constants import normalize_subject
+    from utils.validators import validate_subject
+    subject = normalize_subject(str(payload["subject"]).strip())
+    validate_subject(subject)
+    chapter_topic = str(payload.get("chapterTopic", "")).strip() or None
+    difficulty = str(payload.get("difficulty", "medium")).lower()
+    if difficulty not in ["simple", "medium", "hard"]:
+        difficulty = "medium"
+    question_count = max(5, min(25, int(payload.get("questionCount", 10))))
+    time_limit_minutes = max(5, min(60, int(payload.get("timeLimitMinutes", 15))))
+    parent_instructions = str(payload.get("parentInstructions", "")).strip() or None
+
+    scheduled_at_str = payload.get("scheduledAt")
+    due_date_str = payload.get("dueDate")
+
+    scheduled_at = None
+    due_date = None
+    if scheduled_at_str:
+        try:
+            scheduled_at = datetime.fromisoformat(scheduled_at_str.replace("Z", "+00:00"))
+        except Exception:
+            pass
+    if due_date_str:
+        try:
+            due_date = datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
+        except Exception:
+            pass
+
+    with get_session() as session:
+        student = assert_owns_student(session, student_id, g.current_user_id)
+        student_name = student.user.name if student.user else "Student"
+
+        title = payload.get("title") or f"{student_name}'s {subject} Assessment ({question_count} Questions)"
+
+        scheduled_exam = ScheduledExam(
+            id=str(uuid.uuid4()),
+            parent_id=g.current_user_id,
+            student_id=student.id,
+            title=title,
+            subject=subject,
+            chapter_topic=chapter_topic,
+            board=student.target_board,
+            class_grade=student.class_grade,
+            difficulty=difficulty,
+            question_count=question_count,
+            time_limit_minutes=time_limit_minutes,
+            scheduled_at=scheduled_at,
+            due_date=due_date,
+            parent_instructions=parent_instructions,
+            status="PENDING",
+            created_at=datetime.utcnow(),
+        )
+        session.add(scheduled_exam)
+        session.flush()
+
+        # Send Real-Time Notification to Student
+        from controller.notification_controller import create_notification
+        create_notification(
+            session=session,
+            user_id=student.id,
+            sender_id=g.current_user_id,
+            notif_type="EXAM_ASSIGNED",
+            title=f"New Exam Assigned by Parent 📝",
+            message=f"Your parent scheduled an exam on '{subject}{' - ' + chapter_topic if chapter_topic else ''}' ({question_count} Marks, {difficulty.capitalize()}).",
+            action_url="/arena",
+            metadata_json={
+                "scheduledExamId": scheduled_exam.id,
+                "subject": subject,
+                "chapterTopic": chapter_topic,
+                "difficulty": difficulty,
+                "questionCount": question_count,
+            }
+        )
+
+        log_audit(
+            session,
+            action="EXAM_SCHEDULED_BY_PARENT",
+            user_id=g.current_user_id,
+            entity_type="SCHEDULED_EXAM",
+            entity_id=str(scheduled_exam.id),
+            request=request,
+        )
+        session.commit()
+
+        return success(
+            {"scheduledExam": scheduled_exam_to_dict(scheduled_exam)},
+            201
+        )
+
+
+@token_required
+@roles_required("PARENT")
+def list_scheduled_exams():
+    """List all scheduled exams created by the parent."""
+    with get_session() as session:
+        exams = (
+            session.query(ScheduledExam)
+            .filter(ScheduledExam.parent_id == g.current_user_id)
+            .order_by(ScheduledExam.created_at.desc())
+            .all()
+        )
+        return success({"scheduledExams": [scheduled_exam_to_dict(se) for se in exams]})
+
+
+@token_required
+@roles_required("PARENT")
+def delete_scheduled_exam(scheduled_exam_id: str):
+    """Delete or cancel a scheduled exam."""
+    with get_session() as session:
+        se = session.query(ScheduledExam).filter(
+            ScheduledExam.id == scheduled_exam_id,
+            ScheduledExam.parent_id == g.current_user_id
+        ).first()
+        if not se:
+            raise NotFoundError("Scheduled exam not found")
+
+        session.delete(se)
+        session.commit()
+        return success({"deleted": True})
+

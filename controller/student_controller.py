@@ -4,7 +4,7 @@ from database.dbConnection import get_session
 from helper.mastery_engine import get_topic_mastery_map
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import roles_required
-from model.models import Student, ExamSubmission, LearningPathNode, StudentBadge
+from model.models import Student, ExamSubmission, LearningPathNode, StudentBadge, ScheduledExam
 from utils.errors import NotFoundError
 from utils.response import success
 from utils.serializers import student_to_child_account, submission_to_dict, learning_path_node_to_dict
@@ -88,4 +88,23 @@ def my_learning_path():
     with get_session() as session:
         nodes = session.query(LearningPathNode).filter(LearningPathNode.student_id == g.current_user_id).all()
         return success([learning_path_node_to_dict(n) for n in nodes])
+
+
+@token_required
+@roles_required("STUDENT")
+def get_assigned_exams():
+    """Returns all pending exams assigned by parent to this student."""
+    with get_session() as session:
+        assigned = (
+            session.query(ScheduledExam)
+            .filter(
+                ScheduledExam.student_id == g.current_user_id,
+                ScheduledExam.status == "PENDING"
+            )
+            .order_by(ScheduledExam.created_at.desc())
+            .all()
+        )
+        from controller.parent_controller import scheduled_exam_to_dict
+        return success({"assignedExams": [scheduled_exam_to_dict(se) for se in assigned]})
+
 

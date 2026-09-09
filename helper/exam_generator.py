@@ -54,9 +54,25 @@ def _fetch_questions_from_db(
     if not sp_rows:
         return []
 
+    # Filter only questions that match the requested subject
+    subject_matched_rows = []
+    clean_subj_lower = clean_subj.lower()
+    for q in sp_rows:
+        q_subj = str(q.get("subject_name") or q.get("subject") or q.get("topic_name") or "").lower()
+        if not q_subj or clean_subj_lower in q_subj or q_subj in clean_subj_lower:
+            subject_matched_rows.append(q)
+        elif "comp" in clean_subj_lower and "comp" in q_subj:
+            subject_matched_rows.append(q)
+        elif "math" in clean_subj_lower and "math" in q_subj:
+            subject_matched_rows.append(q)
+        elif "eng" in clean_subj_lower and "eng" in q_subj:
+            subject_matched_rows.append(q)
+        elif "sci" in clean_subj_lower and "sci" in q_subj:
+            subject_matched_rows.append(q)
+
     # Format questions into standard structure
     formatted_questions = []
-    for idx, q in enumerate(sp_rows):
+    for idx, q in enumerate(subject_matched_rows):
         raw_options = q.get("options")
         options_list = None
         if raw_options:
@@ -115,10 +131,37 @@ def generate_exam(
     class_grade: str,
     subject: str,
     difficulty: str,
+    question_count: int | None = None,
+    time_limit_minutes: int | None = None,
+    title: str | None = None,
+    is_assigned: bool = False,
 ) -> Exam:
     weak_topics = get_weak_topics(session, student_id)
     matching_runbooks = rag_engine.retrieve_runbooks(session, board, class_grade, subject)
     rag_context = rag_engine.runbooks_to_context(matching_runbooks, difficulty)
+
+    # Determine class-based marks blueprint
+    cg_lower = (class_grade or "").lower()
+    is_kid = any(c in cg_lower for c in ["class 1", "class 2", "class 3", "class 4"])
+    if is_kid:
+        default_q_count = 5
+        default_grade_marks = 5
+        default_duration_mins = 10
+    elif any(c in cg_lower for c in ["class 11", "class 12", "neet", "iit"]):
+        default_q_count = 10
+        default_grade_marks = 20
+        default_duration_mins = 25
+    elif any(c in cg_lower for c in ["class 9", "class 10"]):
+        default_q_count = 10
+        default_grade_marks = 15
+        default_duration_mins = 20
+    else:
+        default_q_count = 10
+        default_grade_marks = 15
+        default_duration_mins = 15
+
+    is_assigned_challenge = is_assigned or (question_count is not None)
+    target_question_count = question_count or default_q_count
 
     # ------------------------------------------------------------
     # 1. Primary Generation Layer: Relational Database Question Bank
@@ -132,11 +175,15 @@ def generate_exam(
     )
     source = "rag-engine-curated"
 
+    # If DB questions found, slice or supplement
+    if questions_data and len(questions_data) > target_question_count:
+        questions_data = questions_data[:target_question_count]
+
     # ------------------------------------------------------------
     # 2. Secondary Layer: LLM + RAG (kept inactive during initial launch)
     # ------------------------------------------------------------
     USE_LLM_LAYER = False
-    if not questions_data and USE_LLM_LAYER and mistral_client.is_configured():
+    if (not questions_data or len(questions_data) < target_question_count) and USE_LLM_LAYER and mistral_client.is_configured():
         try:
             user_prompt = exam_generation_prompt.build_user_prompt(
                 board=board, class_grade=class_grade, subject=subject, difficulty=difficulty,
@@ -144,49 +191,69 @@ def generate_exam(
             )
             raw = mistral_client.generate_json(exam_generation_prompt.SYSTEM_PROMPT, user_prompt)
             validated = GeneratedExamSchema.model_validate(raw)
-            questions_data = [q.model_dump() for q in validated.questions][:DEFAULT_EXAM_QUESTION_COUNT]
+            questions_data = [q.model_dump() for q in validated.questions][:target_question_count]
             source = "mistral-rag"
         except (mistral_client.MistralUnavailableError, PydanticValidationError) as exc:
             logger.error(f"Exam generation via Mistral failed, using fallback: {exc}")
 
-    # Determine class-based marks blueprint
-    cg_lower = (class_grade or "").lower()
-    if any(c in cg_lower for c in ["class 1", "class 2", "class 3", "class 4"]):
-        default_grade_marks = 5
-        duration_mins = 10
-    elif any(c in cg_lower for c in ["class 11", "class 12", "neet", "iit"]):
-        default_grade_marks = 20
-        duration_mins = 25
-    elif any(c in cg_lower for c in ["class 9", "class 10"]):
-        default_grade_marks = 15
-        duration_mins = 20
-    else:
-        default_grade_marks = 15
-        duration_mins = 15
-
-    calculated_marks = sum(int(q.get("marks", 1)) for q in questions_data) if questions_data and any("marks" in q for q in questions_data) else default_grade_marks
-
     # ------------------------------------------------------------
-    # 3. Deterministic Fallback Bank (Safety backup)
+    # 3. Deterministic Fallback Bank (Safety backup / full question complement)
     # ------------------------------------------------------------
-    if not questions_data:
+    if not questions_data or len(questions_data) < target_question_count:
         ref_links = matching_runbooks[0].curated_reference_urls if matching_runbooks else []
-        questions_data = fallback_exam_bank.build_fallback_questions(board, subject, difficulty, ref_links)
-        source = "rag-engine-curated"
+        fallback_qs = fallback_exam_bank.build_fallback_questions(
+            board=board,
+            subject=subject,
+            difficulty=difficulty,
+            ref_links=ref_links,
+            class_grade=class_grade,
+            limit=target_question_count,
+            force_mcq=is_assigned_challenge,
+        )
+        if not questions_data:
+            questions_data = fallback_qs[:target_question_count]
+        else:
+            # Append missing questions
+            existing_texts = {q.get("questionText") for q in questions_data}
+            for fq in fallback_qs:
+                if len(questions_data) >= target_question_count:
+                    break
+                if fq.get("questionText") not in existing_texts:
+                    questions_data.append(fq)
 
-    title = f"{class_grade} {board} {subject} ({difficulty.upper()}) Diagnostic {calculated_marks}-Mark Exam"
+    # If parent assigned challenge, enforce 100% MCQ format (1 mark each, no hallucination)
+    if is_assigned_challenge:
+        for q in questions_data:
+            q["type"] = "mcq"
+            q["marks"] = 1
+            if not q.get("options") or len(q.get("options", [])) < 2:
+                corr = q.get("correctAnswer", "A")
+                q["options"] = [
+                    f"A) {corr}",
+                    "B) Alternative Option B",
+                    "C) Alternative Option C",
+                    "D) Alternative Option D",
+                ]
+                q["correctAnswer"] = "A"
+        calculated_marks = len(questions_data)
+        exam_title = title or f"{class_grade} {board} {subject} ({difficulty.upper()}) Assigned {calculated_marks}-Mark Challenge"
+    else:
+        calculated_marks = sum(int(q.get("marks", 1)) for q in questions_data) if questions_data and any("marks" in q for q in questions_data) else target_question_count
+        exam_title = title or f"{class_grade} {board} {subject} ({difficulty.upper()}) Diagnostic {calculated_marks}-Mark Exam"
+
+    exam_duration = time_limit_minutes or default_duration_mins
 
     exam = Exam(
         id=str(uuid.uuid4()),
         student_id=student_id,
-        title=title,
+        title=exam_title,
         board=board,
         class_grade=class_grade,
         subject=subject,
         difficulty=difficulty,
         total_marks=calculated_marks,
         question_count=len(questions_data),
-        time_limit_minutes=DEFAULT_EXAM_TIME_LIMIT_MINUTES,
+        time_limit_minutes=exam_duration,
         rag_knowledge_nodes_used=[rb.chapter_name for rb in matching_runbooks],
         source=source,
         status="GENERATED",
@@ -197,10 +264,6 @@ def generate_exam(
 
     ref_links_default = matching_runbooks[0].curated_reference_urls if matching_runbooks else []
     for idx, q in enumerate(questions_data):
-        # Appended through the relationship (not just given a raw exam_id)
-        # so SQLAlchemy's in-memory `exam.questions` collection stays in
-        # sync — setting exam_id alone leaves the ORM's cached collection
-        # stale even though the FK is correct in the database.
         q_diff = str(q.get("difficulty") or difficulty).lower()
         if q_diff not in ("simple", "medium", "hard"):
             q_diff = "medium"

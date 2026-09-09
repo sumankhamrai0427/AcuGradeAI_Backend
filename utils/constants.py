@@ -29,7 +29,26 @@ BOARD_CLASS_MAPPING = {
 SUBJECTS = [
     "Mathematics", "Physics", "Chemistry", "Biology", "Science",
     "Social Studies", "English", "Computer Science", "Logical Reasoning",
+    "General Science", "Social Science", "English Core",
 ]
+
+SUBJECT_ALIASES = {
+    "general science": "Science",
+    "social science": "Social Studies",
+    "english core": "English",
+    "maths": "Mathematics",
+    "math": "Mathematics",
+    "comp science": "Computer Science",
+    "cs": "Computer Science",
+    "evs": "Science",
+}
+
+
+def normalize_subject(subject: str) -> str:
+    if not subject:
+        return "Science"
+    clean = str(subject).strip()
+    return SUBJECT_ALIASES.get(clean.lower(), clean)
 
 DIFFICULTIES = ["simple", "medium", "hard"]
 

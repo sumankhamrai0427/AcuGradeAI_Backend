@@ -1,11 +1,14 @@
 from datetime import date
 
 from flask import g
+from flask import g, request
+from sqlalchemy import exists, or_
+from sqlalchemy.orm import aliased, joinedload
 
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import roles_required
-from model.models import User, Student, Exam, ExamSubmission, Runbook
+from model.models import User, Student, Exam, ExamSubmission, Runbook, Role
 from utils.constants import BOARDS, CLASS_GRADES
 from utils.errors import NotFoundError
 from utils.pagination import get_pagination_params, paginated_response
@@ -121,6 +124,52 @@ def list_users():
     with get_session() as session:
         total = session.query(User).count()
         users = session.query(User).order_by(User.created_at.desc()).offset(offset).limit(limit).all()
+        search = request.args.get("search", "").strip()
+        query = session.query(User).outerjoin(Role)
+        if search:
+            search_pattern = f"%{search}%"
+            student_user = aliased(User)
+            student_role = aliased(Role)
+            matching_child = exists().where(
+                Student.parent_id == User.id,
+                Student.id == student_user.id,
+                student_user.role_id == student_role.id,
+                or_(
+                    student_user.name.ilike(search_pattern),
+                    student_user.email.ilike(search_pattern),
+                    student_role.role_name.ilike(search_pattern),
+                ),
+            )
+            query = query.filter(or_(
+                User.name.ilike(search_pattern),
+                User.email.ilike(search_pattern),
+                Role.role_name.ilike(search_pattern),
+                matching_child,
+            ))
+
+        # Build the complete parent-child relationship before paginating top-level
+        # rows. Student users are represented under their parent rather than as
+        # duplicate standalone rows.
+        all_users = query.order_by(User.created_at.desc()).all()
+        students = session.query(Student).options(joinedload(Student.user)).order_by(
+            Student.created_at.asc(), Student.id.asc()
+        ).all()
+
+        linked_students = {}
+        student_user_ids = set()
+        for student in students:
+            if not student.user or student.id in student_user_ids:
+                continue
+            student_user_ids.add(student.id)
+            linked_students.setdefault(student.parent_id, []).append({
+                "id": student.id,
+                "name": student.user.name or student.user.username or "Student",
+            })
+
+        grouped_users = [user for user in all_users if user.id not in student_user_ids]
+        total = len(grouped_users)
+        users = grouped_users[offset:offset + limit]
+
         items = [
             {
                 "id": u.id,
@@ -132,10 +181,52 @@ def list_users():
                 "isActive": bool(u.is_active),
                 "status": "Active" if u.is_active else "Inactive",
                 "createdAt": u.created_at.isoformat() if u.created_at else None,
+                "linkedStudents": linked_students.get(u.id, []) if u.role and u.role.role_name.upper() == "PARENT" else None,
             }
             for u in users
         ]
         return success(paginated_response(items, total, page, limit))
+
+
+@token_required
+@roles_required("ADMIN", "SUPER_ADMIN")
+def update_user(user_id):
+    payload = request.get_json(silent=True) or {}
+    with get_session() as session:
+        user = session.get(User, user_id)
+        if not user:
+            raise NotFoundError("User not found")
+
+        if "name" in payload:
+            user.name = str(payload["name"]).strip()
+        if "email" in payload:
+            user.email = str(payload["email"]).strip()
+        if "role" in payload:
+            role = session.query(Role).filter(Role.role_name == str(payload["role"]).upper()).first()
+            if not role:
+                raise NotFoundError("Role not found")
+            user.role = role
+
+        session.commit()
+        return success({
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role.role_name.title() if user.role else "User",
+            "roleName": user.role.role_name.upper() if user.role else "USER",
+        })
+
+
+@token_required
+@roles_required("ADMIN", "SUPER_ADMIN")
+def delete_user(user_id):
+    with get_session() as session:
+        user = session.get(User, user_id)
+        if not user:
+            raise NotFoundError("User not found")
+        session.delete(user)
+        session.commit()
+        return success({"deleted": True, "id": user_id})
 
 
 @token_required

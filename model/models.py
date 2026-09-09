@@ -449,6 +449,54 @@ class PTMSchedule(Base):
     student = relationship("Student")
 
 
+# ------------------------------------------------------------
+# 9. Scheduled Exams & Notifications
+# ------------------------------------------------------------
+class ScheduledExam(Base):
+    __tablename__ = "scheduled_exams"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    parent_id = Column(Integer, ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(255), nullable=False)
+    subject = Column(String(60), nullable=False)
+    chapter_topic = Column(String(190), nullable=True)
+    board = Column(String(20), nullable=False)
+    class_grade = Column(String(20), nullable=False)
+    difficulty = Column(Enum("simple", "medium", "hard", name="scheduled_difficulty"), default="medium")
+    question_count = Column(Integer, default=10)
+    time_limit_minutes = Column(Integer, default=15)
+    scheduled_at = Column(DateTime, nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    parent_instructions = Column(Text, nullable=True)
+    status = Column(Enum("PENDING", "IN_PROGRESS", "SUBMITTED", "EXPIRED", name="scheduled_exam_status"), default="PENDING")
+    exam_id = Column(String(36), ForeignKey("exams.id", ondelete="SET NULL"), nullable=True)
+    submission_id = Column(String(36), ForeignKey("exam_submissions.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    parent = relationship("Parent", foreign_keys=[parent_id])
+    student = relationship("Student", foreign_keys=[student_id])
+    exam = relationship("Exam", foreign_keys=[exam_id])
+    submission = relationship("ExamSubmission", foreign_keys=[submission_id])
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    sender_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    type = Column(String(50), nullable=False)  # 'EXAM_ASSIGNED', 'EXAM_SUBMITTED', 'SYSTEM'
+    title = Column(String(200), nullable=False)
+    message = Column(Text, nullable=False)
+    action_url = Column(String(200), nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    is_read = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", foreign_keys=[user_id])
+    sender = relationship("User", foreign_keys=[sender_id])
 
 
 # ------------------------------------------------------------
