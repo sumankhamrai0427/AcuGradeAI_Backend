@@ -14,8 +14,12 @@ _enabled = False
 
 try:
     import chromadb
+    from chromadb.config import Settings
 
-    _client = chromadb.PersistentClient(path=config.VECTOR_DB_PATH)
+    _client = chromadb.PersistentClient(
+        path=config.VECTOR_DB_PATH,
+        settings=Settings(anonymized_telemetry=False)
+    )
     _collection = _client.get_or_create_collection(name="acugrade_documents")
     _enabled = True
 except Exception as exc:  # pragma: no cover - environment dependent

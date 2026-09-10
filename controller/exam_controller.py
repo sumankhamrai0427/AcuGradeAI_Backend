@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import request, g
 from sqlalchemy import text
@@ -423,20 +423,35 @@ def submit_exam(exam_id):
 
         exam.status = "SUBMITTED"
 
-        # Server-side XP/badges
-        xp_earned = gamification_engine.compute_exam_xp(marks_obtained, time_taken_seconds)
-        newly_unlocked_badges = gamification_engine.evaluate_badge_unlocks(
-            session, student, marks_obtained, time_taken_seconds, exam.difficulty
-        )
-        gamification_engine.award_xp(session, student, xp_earned, f"exam:{exam.id}")
-
         # Rolling average percentage (0-100%) + streak + mastery + misconceptions + learning path.
         updated_total = (student.total_exams_taken or 0) + 1
         student.average_score = round(
             ((float(student.average_score or 0) * (student.total_exams_taken or 0)) + accuracy_percentage) / updated_total, 2
         )
         student.total_exams_taken = updated_total
-        student.streak_days = (student.streak_days or 0) + 1
+
+        # Daily Streak Logic: Based on consecutive calendar days
+        today = date.today()
+        if not student.last_exam_date:
+            student.streak_days = 1
+        elif student.last_exam_date == today:
+            # Same day practice preserves the current streak
+            student.streak_days = max(1, student.streak_days or 1)
+        elif student.last_exam_date == today - timedelta(days=1):
+            # Consecutive day practice increments the streak by 1
+            student.streak_days = (student.streak_days or 0) + 1
+        else:
+            # Missed a day or more, resets streak to 1
+            student.streak_days = 1
+
+        student.last_exam_date = today
+
+        # Server-side XP/badges
+        xp_earned = gamification_engine.compute_exam_xp(marks_obtained, time_taken_seconds)
+        newly_unlocked_badges = gamification_engine.evaluate_badge_unlocks(
+            session, student, marks_obtained, time_taken_seconds, exam.difficulty
+        )
+        gamification_engine.award_xp(session, student, xp_earned, f"exam:{exam.id}")
 
         mastery_engine.update_mastery_from_insights(session, student.id, analysis["kGraphInsights"])
         misconception_engine.record_misconceptions_from_evaluations(session, student.id, evaluations)

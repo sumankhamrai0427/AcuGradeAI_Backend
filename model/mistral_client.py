@@ -5,9 +5,8 @@ cleanly — it never fabricates a response pretending to be from Mistral.
 """
 import json
 import time
+import warnings
 import requests
-# pyrefly: ignore [missing-import]
-import google.generativeai as genai
 import httpx
 
 from utils.config import config
@@ -18,6 +17,18 @@ MISTRAL_EMBED_URL = "https://api.mistral.ai/v1/embeddings"
 
 MAX_RETRIES = 2
 TIMEOUT_SECONDS = 30
+
+
+def _get_genai():
+    """Lazily import google.generativeai with FutureWarning suppressed."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            # pyrefly: ignore [missing-import]
+            import google.generativeai as genai
+            return genai
+        except ImportError:
+            return None
 
 
 class MistralUnavailableError(Exception):
@@ -42,6 +53,9 @@ def call_llm_chat(messages: list, json_mode: bool = False, temperature: float = 
     try:
         # 1. Gemini Cloud
         if config.ACTIVE_LLM == "gemini":
+            genai = _get_genai()
+            if not genai:
+                raise MistralUnavailableError("google-generativeai package is not installed.")
             genai.configure(api_key=config.GEMINI_API_KEY)
             
             system_instruction = None
