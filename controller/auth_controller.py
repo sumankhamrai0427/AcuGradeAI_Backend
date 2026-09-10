@@ -349,18 +349,19 @@ def reset_password():
         raise AppError("WEAK_PASSWORD", "Password must be at least 6 characters.", 400)
 
     with get_session() as session:
-        # Search by username or email (case-insensitive)
+        # Search primarily by username (case-insensitive)
         user = session.query(User).filter(
             func.lower(User.username) == identifier.lower()
         ).first()
 
+        # Fallback to email only if no account was matched by username
         if not user:
             user = session.query(User).filter(
                 func.lower(User.email) == identifier.lower()
             ).first()
 
         if not user:
-            raise AppError("NOT_FOUND", "No account found with that username or email.", 404)
+            raise AppError("NOT_FOUND", f"No account found with username '{identifier}'.", 404)
 
         # Get role name
         role = session.query(Role).filter(Role.id == user.role_id).first()
@@ -369,7 +370,7 @@ def reset_password():
         # Determine target email for security confirmation notification
         target_email = user.email
 
-        # If student account without email, find linked parent email
+        # If student account without direct email, find linked parent email
         if not target_email and user.role_id == 1:
             student = session.query(Student).filter(Student.id == user.id).first()
             if student and student.parent_id:
@@ -390,7 +391,13 @@ def reset_password():
                 role_name=role_name,
             )
 
-        log_audit(session, user_id=user.id, action="PASSWORD_RESET", details=f"User {user.username} reset password")
+        log_audit(
+            session,
+            action="PASSWORD_RESET",
+            user_id=user.id,
+            entity_type="USER",
+            entity_id=str(user.id),
+        )
 
         return success({"reset": True}, message="Password updated successfully. A confirmation email has been sent.")
 
@@ -406,7 +413,7 @@ def admin_reset_password():
         raise AppError("WEAK_PASSWORD", "Password must be at least 6 characters.", 400)
 
     with get_session() as session:
-        user = session.query(User).filter((User.email == email) | (User.name == email)).first()
+        user = session.query(User).filter((User.email == email) | (User.name == email) | (User.username == email)).first()
         if not user:
             raise AppError("NOT_FOUND", "Admin account not found", 404)
 
@@ -425,7 +432,13 @@ def admin_reset_password():
                 role_name="Admin",
             )
 
-        log_audit(session, user_id=user.id, action="ADMIN_PASSWORD_RESET", details=f"Admin {user.username} reset password")
+        log_audit(
+            session,
+            action="ADMIN_PASSWORD_RESET",
+            user_id=user.id,
+            entity_type="USER",
+            entity_id=str(user.id),
+        )
 
         return success({"reset": True}, message="Password updated successfully. A confirmation email has been sent.")
 

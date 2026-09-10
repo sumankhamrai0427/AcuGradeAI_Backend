@@ -294,7 +294,8 @@ def list_audit_logs():
                 "entityType": log.entity_type,
                 "entityId": log.entity_id,
                 "ipAddress": log.ip_address,
-                "createdAt": log.created_at.isoformat() if log.created_at else None,
+                "createdAt": f"{log.created_at.isoformat()}+05:30" if log.created_at else None,
+                "createdAtFormatted": log.created_at.strftime("%d %b %Y, %I:%M:%S %p IST") if log.created_at else None,
             }
             for log in logs
         ]

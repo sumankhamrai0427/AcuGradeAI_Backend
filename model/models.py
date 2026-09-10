@@ -1,6 +1,14 @@
 """SQLAlchemy ORM models — one-to-one with sql/schema.sql."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+# Indian Standard Time (IST: UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def get_ist_now() -> datetime:
+    """Returns the current datetime in Indian Standard Time (IST)."""
+    return datetime.now(IST).replace(tzinfo=None)
 
 from sqlalchemy import (
     Column, String, Integer, Boolean, DateTime, Date, ForeignKey, Enum, JSON,
@@ -511,7 +519,7 @@ class AuditLog(Base):
     entity_type = Column(String(60), nullable=True)
     entity_id = Column(String(60), nullable=True)
     ip_address = Column(String(64), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
 
 # ------------------------------------------------------------

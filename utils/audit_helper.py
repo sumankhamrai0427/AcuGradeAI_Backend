@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 from sqlalchemy.orm import Session
-from model.models import AuditLog, gen_uuid
+from model.models import AuditLog, gen_uuid, get_ist_now
 
 logger = logging.getLogger("sahajpath")
 
@@ -50,6 +50,7 @@ def log_audit(
             entity_type=str(entity_type)[:60] if entity_type else None,
             entity_id=str(entity_id)[:60] if entity_id else None,
             ip_address=str(resolved_ip)[:64] if resolved_ip else None,
+            created_at=get_ist_now(),
         )
         db.add(audit_entry)
         db.flush()
