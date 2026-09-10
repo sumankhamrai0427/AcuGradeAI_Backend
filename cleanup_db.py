@@ -19,23 +19,57 @@ from datetime import datetime
 # Ensure backend directory is in path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
 
-from sqlalchemy import text
+from sqlalchemy import text, func
 from database.dbConnection import get_session
 from utils.config import config
 from utils.security import hash_password
 from model.models import User, Role
 
-# 1. Transactional data tables
+# 1. Transactional runtime data tables (Truncated on cleanup)
+# Total: 20 runtime transactional tables verified directly from live MySQL database
 TRANSACTIONAL_TABLES = [
-    "question_evaluations", "diagnostic_analyses", "exam_submissions",
-    "questions", "exams", "messages", "conversations", "ptm_schedules",
-    "shared_dossiers", "xp_events", "student_badges", "mastery",
-    "misconceptions", "learning_path_nodes", "audit_logs",
-    "refresh_tokens", "document_chunks", "documents"
+    "question_evaluations",
+    "diagnostic_analyses",
+    "exam_submissions",
+    "scheduled_exams",
+    "questions",
+    "exams",
+    "notifications",
+    "messages",
+    "conversations",
+    "ptm_schedules",
+    "shared_dossiers",
+    "xp_events",
+    "student_badges",
+    "mastery",
+    "misconceptions",
+    "learning_path_nodes",
+    "audit_logs",
+    "refresh_tokens",
+    "document_chunks",
+    "documents",
 ]
 
-# 2. User profile extension tables
+# 2. User profile extension tables (Truncated on user clean, then Admin is re-seeded)
 USER_PROFILE_TABLES = ["students", "parents", "teachers"]
+
+# 3. Master / Static catalog tables (PRESERVED - NEVER truncated):
+# Total: 15 master tables verified directly from live MySQL database
+# - roles
+# - role_page_access
+# - badges
+# - runbooks
+# - board_master
+# - class_master
+# - subject_master
+# - chapter_master
+# - topic_master
+# - difficulty_level_master
+# - question_type_master
+# - question_master
+# - author_master
+# - category_master
+# - blogs
 
 ADMIN_EMAIL = "admin123@acugrade.ai"
 ADMIN_USERNAME = "admin123"
@@ -53,62 +87,100 @@ def clean_transactional_tables():
     _guard_production()
     with get_session() as session:
         session.execute(text("SET FOREIGN_KEY_CHECKS=0;"))
+        truncated_count = 0
         for table in TRANSACTIONAL_TABLES:
-            session.execute(text(f"TRUNCATE TABLE `{table}`;"))
+            try:
+                session.execute(text(f"TRUNCATE TABLE `{table}`;"))
+                truncated_count += 1
+            except Exception as e:
+                # If table does not exist yet in current schema version, skip gracefully
+                print(f"[i] Skipped '{table}' ({e.__class__.__name__})")
         session.execute(text("SET FOREIGN_KEY_CHECKS=1;"))
         session.commit()
-    print(f"[OK] Truncated {len(TRANSACTIONAL_TABLES)} transactional tables successfully.")
+    print(f"[OK] Truncated {truncated_count} transactional tables successfully.")
 
 
 def seed_admin_user(session):
-    """Ensures Admin user exists with default credentials."""
-    # Find Admin Role ID (default 4)
-    admin_role = session.query(Role).filter(Role.role_name == "ADMIN").first()
-    admin_role_id = admin_role.id if admin_role else 4
+    """Ensures primary Admin user exists with ID=1 and default credentials."""
+    # Find or create Admin Role
+    admin_role = session.query(Role).filter(
+        func.lower(Role.role_name).in_(["admin", "super_admin"])
+    ).first()
+    
+    if not admin_role:
+        admin_role = session.query(Role).filter(Role.id == 4).first()
+    
+    if not admin_role:
+        admin_role = Role(id=4, role_name="ADMIN", is_active=True)
+        session.add(admin_role)
+        session.flush()
 
-    admin_user = User(
-        name=ADMIN_NAME,
-        username=ADMIN_USERNAME,
-        email=ADMIN_EMAIL,
-        password_hash=hash_password(ADMIN_PASSWORD_RAW),
-        role_id=admin_role_id,
-        auth_provider="EMAIL",
-        is_active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-    )
-    session.add(admin_user)
+    admin_role_id = admin_role.id
+
+    # Check if admin user exists already
+    admin_user = session.query(User).filter(
+        (User.id == 1) | 
+        (func.lower(User.email) == ADMIN_EMAIL.lower()) | 
+        (func.lower(User.username) == ADMIN_USERNAME.lower())
+    ).first()
+
+    if admin_user:
+        admin_user.name = ADMIN_NAME
+        admin_user.username = ADMIN_USERNAME
+        admin_user.email = ADMIN_EMAIL
+        admin_user.password_hash = hash_password(ADMIN_PASSWORD_RAW)
+        admin_user.role_id = admin_role_id
+        admin_user.is_active = True
+        admin_user.updated_at = datetime.utcnow()
+    else:
+        admin_user = User(
+            id=1,
+            name=ADMIN_NAME,
+            username=ADMIN_USERNAME,
+            email=ADMIN_EMAIL,
+            password_hash=hash_password(ADMIN_PASSWORD_RAW),
+            role_id=admin_role_id,
+            is_active=True,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        session.add(admin_user)
+    
     session.flush()
     print(f"[OK] Auto-seeded Admin User:")
+    print(f"     * User ID:  {admin_user.id}")
     print(f"     * Email:    {ADMIN_EMAIL}")
     print(f"     * Username: {ADMIN_USERNAME}")
     print(f"     * Password: {ADMIN_PASSWORD_RAW}")
-    print(f"     * Role ID:  {admin_role_id} (ADMIN)")
+    print(f"     * Role ID:  {admin_role_id} ({admin_role.role_name})")
 
 
 def clean_users_and_seed_admin():
-    """Truncates student, parent, teacher and users tables, then re-seeds Admin."""
+    """Truncates student, parent, teacher and users tables, then re-seeds Admin with ID=1."""
     _guard_production()
     with get_session() as session:
         session.execute(text("SET FOREIGN_KEY_CHECKS=0;"))
         for table in USER_PROFILE_TABLES:
-            session.execute(text(f"TRUNCATE TABLE `{table}`;"))
+            try:
+                session.execute(text(f"TRUNCATE TABLE `{table}`;"))
+            except Exception:
+                pass
         session.execute(text("TRUNCATE TABLE `users`;"))
         session.execute(text("SET FOREIGN_KEY_CHECKS=1;"))
         
-        # Seed Admin user
+        # Seed Admin user (ID = 1)
         seed_admin_user(session)
         session.commit()
-    print("[OK] User tables truncated and Admin user re-created successfully.")
+    print("[OK] User tables truncated and Admin user (ID=1) re-created successfully.")
 
 
 def clean_all_data_tables():
-    """Performs full database cleanup (Transactions + Users) and auto-seeds Admin."""
+    """Performs full database cleanup (Transactions + Users) and auto-seeds Admin (ID=1)."""
     _guard_production()
     print("--- Starting Full Database Cleanup ---")
     clean_transactional_tables()
     clean_users_and_seed_admin()
-    print("[SUCCESS] All transactional & user data reset. Admin account is ready for login.")
+    print("[SUCCESS] All transactional & user data reset. Admin account (ID=1) is ready for login.")
 
 
 def clean_vector_store():
