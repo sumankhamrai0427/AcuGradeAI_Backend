@@ -2,7 +2,7 @@
 import logging
 import sys
 
-logger = logging.getLogger("acugrade")
+logger = logging.getLogger("sahajpath")
 logger.setLevel(logging.INFO)
 
 if not logger.handlers:

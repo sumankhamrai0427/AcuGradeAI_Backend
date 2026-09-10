@@ -5,7 +5,7 @@ import jwt
 from flask import request, g
 from sqlalchemy import text, func
 
-from .email_controller import send_email, send_registration_email, send_login_email
+from .email_controller import send_email, send_registration_email, send_login_email, send_password_changed_email
 
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
@@ -337,6 +337,64 @@ def admin_login():
         )
 
 
+def reset_password():
+    """Public password reset for Parents, Students, and Teachers."""
+    payload = request.get_json(force=True, silent=True) or {}
+    require_fields(payload, ["identifier", "newPassword"])
+
+    identifier = str(payload["identifier"]).strip()
+    new_password = str(payload["newPassword"])
+
+    if len(new_password) < 6:
+        raise AppError("WEAK_PASSWORD", "Password must be at least 6 characters.", 400)
+
+    with get_session() as session:
+        # Search by username or email (case-insensitive)
+        user = session.query(User).filter(
+            func.lower(User.username) == identifier.lower()
+        ).first()
+
+        if not user:
+            user = session.query(User).filter(
+                func.lower(User.email) == identifier.lower()
+            ).first()
+
+        if not user:
+            raise AppError("NOT_FOUND", "No account found with that username or email.", 404)
+
+        # Get role name
+        role = session.query(Role).filter(Role.id == user.role_id).first()
+        role_name = role.role_name if role else "User"
+
+        # Determine target email for security confirmation notification
+        target_email = user.email
+
+        # If student account without email, find linked parent email
+        if not target_email and user.role_id == 1:
+            student = session.query(Student).filter(Student.id == user.id).first()
+            if student and student.parent_id:
+                parent_user = session.query(User).filter(User.id == student.parent_id).first()
+                if parent_user and parent_user.email:
+                    target_email = parent_user.email
+
+        user.password_hash = hash_password(new_password)
+        user.updated_at = datetime.utcnow()
+        session.commit()
+
+        # Dispatch confirmation email if target email is available
+        if target_email:
+            send_password_changed_email(
+                to_email=target_email,
+                name=user.name,
+                username=user.username,
+                role_name=role_name,
+            )
+
+        log_audit(session, user_id=user.id, action="PASSWORD_RESET", details=f"User {user.username} reset password")
+
+        return success({"reset": True}, message="Password updated successfully. A confirmation email has been sent.")
+
+
 def admin_reset_password():
     payload = request.get_json(force=True, silent=True) or {}
     require_fields(payload, ["email", "newPassword"])
@@ -344,8 +402,10 @@ def admin_reset_password():
     email = payload["email"].strip()
     new_password = payload["newPassword"]
 
+    if len(new_password) < 6:
+        raise AppError("WEAK_PASSWORD", "Password must be at least 6 characters.", 400)
+
     with get_session() as session:
-        from model.models import User
         user = session.query(User).filter((User.email == email) | (User.name == email)).first()
         if not user:
             raise AppError("NOT_FOUND", "Admin account not found", 404)
@@ -357,7 +417,17 @@ def admin_reset_password():
         user.updated_at = datetime.utcnow()
         session.commit()
 
-        return success({"reset": True}, message="Password updated successfully")
+        if user.email:
+            send_password_changed_email(
+                to_email=user.email,
+                name=user.name,
+                username=user.username,
+                role_name="Admin",
+            )
+
+        log_audit(session, user_id=user.id, action="ADMIN_PASSWORD_RESET", details=f"Admin {user.username} reset password")
+
+        return success({"reset": True}, message="Password updated successfully. A confirmation email has been sent.")
 
 
 def google_auth():

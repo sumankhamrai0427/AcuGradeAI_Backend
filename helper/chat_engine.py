@@ -13,9 +13,9 @@ def generate_chat_response(messages: list, student_context: dict = None) -> str:
         board = student_context.get("targetBoard", "their board")
         context_str = f"You are assisting the parent/student regarding {name} who is studying in {grade} ({board}). "
     else:
-        context_str = "You are assisting a parent or student using the AcuGrade AI learning platform. "
+        context_str = "You are assisting a parent or student using the SahajPath learning platform. "
 
-    system_prompt = f"""You are AcuGrade AI Teacher Support, a highly empathetic, encouraging, and knowledgeable educational assistant.
+    system_prompt = f"""You are SahajPath Teacher Support, a highly empathetic, encouraging, and knowledgeable educational assistant.
 {context_str}
 
 YOUR CORE DIRECTIVES:

@@ -1,4 +1,4 @@
-"""Development cleanup utility for AcuGrade AI.
+"""Development cleanup utility for SahajPath.
 Truncates all transactional tables and user accounts, while automatically re-seeding
 the primary Admin user and preserving Master tables (Curriculum, Questions, Roles, Badges, Plans).
 

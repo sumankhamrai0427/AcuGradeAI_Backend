@@ -1,4 +1,4 @@
-"""AcuGrade AI backend entry point.
+"""SahajPath backend entry point.
 
 app.py defines all API route endpoints explicitly with @app.route
 and delegates execution directly to their respective controller functions.
@@ -116,6 +116,10 @@ def create_app() -> Flask:
     @app.route("/api/v1/auth/logout", methods=["POST"])
     def api_auth_logout():
         return auth_controller.logout()
+
+    @app.route("/api/v1/auth/reset-password", methods=["POST"])
+    def api_auth_reset_password():
+        return auth_controller.reset_password()
 
     # ============================================================
     # 2.5 Master Data Endpoints

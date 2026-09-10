@@ -44,7 +44,7 @@ class Config:
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
     SMTP_USERNAME = os.getenv("SMTP_USERNAME")
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-    SMTP_SENDER_NAME = os.getenv("SMTP_SENDER_NAME", "AcuGrade AI")
+    SMTP_SENDER_NAME = os.getenv("SMTP_SENDER_NAME", "SahajPath")
     SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "True").lower() in ("true", "1", "t", "yes")
 
 config = Config()
