@@ -12,10 +12,10 @@ from model.models import Parent, Student, User, Role, ExamSubmission, LearningPa
 from utils.errors import AppError, NotFoundError
 from utils.response import success
 from utils.audit_helper import log_audit
-from utils.security import hash_pin, hash_password
+from utils.security import hash_password
 from utils.serializers import student_to_child_account, submission_to_dict, learning_path_node_to_dict
 from utils.constants import BOARD_CLASS_MAPPING
-from utils.validators import require_fields, validate_board, validate_class_grade, validate_board_class, validate_pin, validate_username
+from utils.validators import require_fields, validate_board, validate_class_grade, validate_board_class, validate_username, validate_email
 
 
 def get_child_registration_options():
@@ -60,65 +60,75 @@ def get_dashboard():
     Page Access (Menu Permissions), and Stats in ONE single round trip.
     """
     with get_session() as session:
-        user = session.get(User, g.current_user_id)
-        if not user:
-            raise NotFoundError("User account not found")
-        parent = session.get(Parent, g.current_user_id)
-        if not parent:
-            parent = Parent(id=user.id)
-            session.add(parent)
-            session.flush()
+        parent_user = session.get(User, g.current_user_id)
+        if not parent_user:
+            raise NotFoundError("Parent not found")
 
-        from controller.auth_controller import get_page_access_for_role
-        from helper.mastery_engine import get_topic_mastery_map
+        children = (
+            session.query(Student)
+            .filter(Student.parent_id == g.current_user_id)
+            .all()
+        )
 
-        # 1. Fetch children
-        children_records = session.query(Student).filter(Student.parent_id == g.current_user_id).all()
-        enriched_children = []
         all_recent_exams = []
-        total_family_xp = 0
+        enriched_children = []
 
-        for child in children_records:
-            total_family_xp += (child.xp or 0)
+        for child in children:
             badge_ids = _badge_ids_for(session, child.id)
             child_dict = student_to_child_account(child, badge_ids)
-            child_dict["topicMastery"] = get_topic_mastery_map(session, child.id)
 
-            # Fetch recent exams for this child
-            child_exams = (
+            # Fetch Recent Exam Submissions for each child (sorted by most recent)
+            submissions = (
                 session.query(ExamSubmission)
                 .filter(ExamSubmission.student_id == child.id)
                 .order_by(ExamSubmission.submitted_at.desc())
                 .limit(10)
                 .all()
             )
-            child_dict["recentExams"] = [submission_to_dict(s) for s in child_exams]
-            all_recent_exams.extend(child_dict["recentExams"])
+            child_exams = [submission_to_dict(s) for s in submissions]
+            child_dict["recentExams"] = child_exams
+            all_recent_exams.extend(child_exams)
+
+            # Topic Mastery Map from learning_path_nodes
+            nodes = (
+                session.query(LearningPathNode)
+                .filter(LearningPathNode.student_id == child.id)
+                .all()
+            )
+            child_dict["topicMastery"] = {
+                n.topic: float(n.mastery_score) for n in nodes if n.topic
+            }
+
             enriched_children.append(child_dict)
 
-        # Sort all exams descending by submission timestamp
-        all_recent_exams.sort(key=lambda x: x.get("submittedAt") or "", reverse=True)
+        # Sort all family exams globally by date
+        all_recent_exams.sort(key=lambda x: x.get("submittedAt", ""), reverse=True)
 
-        # 2. Get Menu Permissions for PARENT role
+        from controller.auth_controller import get_page_access_for_role
+        # Dynamic Menu Permissions for PARENT role
         page_access = get_page_access_for_role(session, "PARENT")
 
         profile = {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
+            "id": parent_user.id,
+            "name": parent_user.name,
+            "username": parent_user.username,
+            "email": parent_user.email,
             "role": "parent",
-            "createdAt": user.created_at.isoformat() if user.created_at else None,
+            "createdAt": parent_user.created_at.isoformat() if parent_user.created_at else None,
+        }
+
+        stats = {
+            "totalChildren": len(children),
+            "totalFamilyExams": len(all_recent_exams),
+            "totalFamilyXP": sum(c.xp or 0 for c in children),
         }
 
         return success({
             "profile": profile,
             "children": enriched_children,
-            "recentExams": all_recent_exams,
+            "recentExams": all_recent_exams[:10],
             "pageAccess": page_access,
-            "stats": {
-                "totalChildren": len(enriched_children),
-                "totalFamilyXP": total_family_xp,
-            }
+            "stats": stats,
         })
 
 
@@ -144,30 +154,33 @@ def get_me():
 @roles_required("PARENT")
 def list_children():
     with get_session() as session:
-        children = session.query(Student).filter(Student.parent_id == g.current_user_id).all()
+        children = (
+            session.query(Student)
+            .filter(Student.parent_id == g.current_user_id)
+            .all()
+        )
         return success([student_to_child_account(c, _badge_ids_for(session, c.id)) for c in children])
 
 
 @token_required
 @roles_required("PARENT")
 def add_child():
-    """Adds a child sub-account with unique username, parent's email, and initial student profile."""
     payload = request.get_json(force=True, silent=True) or {}
-    require_fields(payload, ["name", "username", "classGrade", "targetBoard"])
-    
+    require_fields(payload, ["name", "username", "classGrade", "targetBoard", "password"])
+
     username = payload["username"].strip()
     validate_username(username)
 
-    password = str(payload.get("password") or payload.get("pin") or "1234").strip()
-    if not password:
-        raise AppError("VALIDATION_ERROR", "Password is required", 400)
-    
+    password = payload["password"]
     password_hash = hash_password(password)
     name = payload["name"].strip()
     class_grade = payload["classGrade"].strip()
     target_board = payload["targetBoard"].strip()
     validate_board_class(target_board, class_grade)
     school_name = payload.get("schoolName", "").strip() or None
+    school_email = payload.get("schoolEmail", "").strip() or None
+    if school_email:
+        validate_email(school_email)
     avatar = payload.get("avatar", "👦")
     
     with get_session() as session:
@@ -210,7 +223,7 @@ def add_child():
             class_grade=class_grade,
             target_board=target_board,
             school_name=school_name,
-            pin_hash=hash_pin(password[:4] if len(password) >= 4 and password[:4].isdigit() else "1234"),
+            school_email=school_email,
             xp=0,
             level=1,
             streak_days=0,
@@ -250,13 +263,17 @@ def update_child(student_id):
             student.user.name = payload["name"]
         for field, attr in [
             ("avatar", "avatar"), ("classGrade", "class_grade"), ("targetBoard", "target_board"),
-            ("schoolName", "school_name"),
+            ("schoolName", "school_name"), ("schoolEmail", "school_email"),
         ]:
             if field in payload:
-                setattr(student, attr, payload[field])
-        if payload.get("pin"):
-            validate_pin(payload["pin"])
-            student.pin_hash = hash_pin(payload["pin"])
+                val = payload[field]
+                if field == "schoolEmail" and val:
+                    val = str(val).strip() or None
+                    if val:
+                        validate_email(val)
+                elif field == "schoolName" and val:
+                    val = str(val).strip() or None
+                setattr(student, attr, val)
 
         log_audit(
             session,

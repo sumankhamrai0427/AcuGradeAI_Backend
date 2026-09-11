@@ -108,7 +108,7 @@ class Student(Base):
     class_grade = Column(String(20), nullable=False)
     target_board = Column(String(20), nullable=False)
     school_name = Column(String(190), nullable=True)
-    pin_hash = Column(String(255), nullable=False)
+    school_email = Column(String(190), nullable=True)
     daily_exams_taken_today = Column(Integer, default=0)
     last_exam_date = Column(Date, nullable=True)
     total_exams_taken = Column(Integer, default=0)

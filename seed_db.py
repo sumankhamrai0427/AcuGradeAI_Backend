@@ -14,7 +14,7 @@ from datetime import datetime
 from sqlalchemy import text
 
 from database.dbConnection import get_session, init_db
-from model.models import SubscriptionPlan, Badge, User, Teacher, Runbook, Role, RolePageAccess
+from model.models import Badge, User, Teacher, Runbook, Role, RolePageAccess
 from utils.security import hash_password
 
 SEED_RUNBOOKS_PATH = os.path.join(os.path.dirname(__file__), "sql", "seed_runbooks.json")
@@ -38,10 +38,9 @@ ROLE_PAGES = [
     {"role_id": 2, "page_name": "Family Dashboard", "page_route": "/dashboard", "icon": "BarChart3", "menu_order": 1},
     {"role_id": 2, "page_name": "Child Profiles", "page_route": "/children", "icon": "Users", "menu_order": 2},
     {"role_id": 2, "page_name": "Parent-Teacher Hub", "page_route": "/ptc", "icon": "MessageSquare", "menu_order": 3},
-    {"role_id": 2, "page_name": "Subscription Plans", "page_route": "/pricing", "icon": "Sparkles", "menu_order": 4},
-    {"role_id": 2, "page_name": "10-Mark Exam Arena", "page_route": "/arena", "icon": "Play", "menu_order": 5},
-    {"role_id": 2, "page_name": "Adaptive Path Overview", "page_route": "/learning-path", "icon": "Compass", "menu_order": 6},
-    {"role_id": 2, "page_name": "Curriculum Blog", "page_route": "/blog", "icon": "BookOpen", "menu_order": 7},
+    {"role_id": 2, "page_name": "10-Mark Exam Arena", "page_route": "/arena", "icon": "Play", "menu_order": 4},
+    {"role_id": 2, "page_name": "Adaptive Path Overview", "page_route": "/learning-path", "icon": "Compass", "menu_order": 5},
+    {"role_id": 2, "page_name": "Curriculum Blog", "page_route": "/blog", "icon": "BookOpen", "menu_order": 6},
 
     # 3. Teacher Persona Navigation
     {"role_id": 3, "page_name": "Teacher Communication Portal", "page_route": "/ptc", "icon": "MessageSquare", "menu_order": 1},
@@ -52,53 +51,6 @@ ROLE_PAGES = [
     {"role_id": 4, "page_name": "RAG Runbook Engine", "page_route": "/runbooks", "icon": "Layers", "menu_order": 2},
     {"role_id": 4, "page_name": "Family Dashboard", "page_route": "/dashboard", "icon": "BarChart3", "menu_order": 3},
     {"role_id": 4, "page_name": "10-Mark Exam Arena", "page_route": "/arena", "icon": "Play", "menu_order": 4},
-]
-
-SUBSCRIPTION_PLANS = [
-    {
-        "id": "free", "name": "Foundation Free", "price_monthly": 0, "price_yearly": 0,
-        "currency": "USD", "badge": None,
-        "description": "Perfect for daily revision and steady concept checking across school subjects.",
-        "features": [
-            "1 exam (10 marks) per day per child",
-            "All 8 Boards (CBSE, ICSE, ISC, Cambridge, NCERT, NEET, IIT)",
-            "Basic answer key & score breakdown",
-            "Up to 2 child sub-accounts",
-            "Community knowledge base access",
-        ],
-        "daily_exam_limit": "20", "max_children": "2", "is_popular": False,
-    },
-    {
-        "id": "scholar_pro", "name": "Scholar Pro", "price_monthly": 9, "price_yearly": 89,
-        "currency": "USD", "badge": "Most Popular for School Students",
-        "description": "Comprehensive adaptive AI-RAG learning with evolutionary topic mastery tracking.",
-        "features": [
-            "Unlimited 10-mark diagnostic exams daily",
-            "Full AI-RAG Misconception & Error Classification",
-            "Curated Official Syllabus Reference Links & Video Guides",
-            "Evolutionary Subject K-Graph Mastery Tracker",
-            "Up to 5 child sub-accounts with separate PINs",
-            "Detailed Parent Performance Analytical Reports",
-            "Downloadable & Printable PDF Diagnostic Dossiers",
-        ],
-        "daily_exam_limit": "unlimited", "max_children": "5", "is_popular": True,
-    },
-    {
-        "id": "genius_competitive", "name": "Genius Competitive (NEET / IIT / Cambridge)",
-        "price_monthly": 19, "price_yearly": 189, "currency": "USD",
-        "badge": "For Olympiad, NEET & JEE Aspirants",
-        "description": "Deep analytical testing engine with high-order thinking (HOTS) and Olympiad difficulty.",
-        "features": [
-            "Everything in Scholar Pro + Unlimited Children",
-            "High-Order Thinking (HOTS) & Olympiad Difficulty Drills",
-            "Dedicated NEET NTA & IIT JEE Advanced Question Archetypes",
-            "Custom Chapter Runbook & Blueprint Focus Mode",
-            "Negative marking & speed velocity analytics",
-            "Priority AI Reasoning",
-            "1-on-1 Parent Consultation Summary Export",
-        ],
-        "daily_exam_limit": "unlimited", "max_children": "unlimited", "is_popular": False,
-    },
 ]
 
 BADGES = [
@@ -151,14 +103,7 @@ def seed():
                 ))
         session.flush()
 
-        # 3. Seed Subscription Plans
-        for plan_data in SUBSCRIPTION_PLANS:
-            existing = session.get(SubscriptionPlan, plan_data["id"])
-            if existing:
-                continue
-            session.add(SubscriptionPlan(**plan_data))
-
-        # 4. Seed Badges
+        # 3. Seed Badges
         for badge_data in BADGES:
             if session.get(Badge, badge_data["id"]):
                 continue
@@ -170,6 +115,7 @@ def seed():
         if not existing_admin:
             admin_user = User(
                 name="Admin123",
+                username="Admin123",
                 email=admin_email,
                 password_hash=hash_password("admin1234"),
                 role_id=4,  # ADMIN
@@ -186,6 +132,7 @@ def seed():
         if not teacher_user:
             teacher_user = User(
                 name="Priya Sharma",
+                username="teacher_priya",
                 email=sample_teacher_email,
                 password_hash=hash_password("ChangeMe123!"),
                 role_id=3,  # TEACHER

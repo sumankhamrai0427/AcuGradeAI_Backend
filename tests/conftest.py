@@ -36,15 +36,18 @@ def client():
 
 @pytest.fixture()
 def registered_parent(client):
-    email = f"parent-{uuid.uuid4().hex[:8]}@test.com"
+    uid = uuid.uuid4().hex[:8]
+    email = f"parent-{uid}@test.com"
+    username = f"parent_{uid}"
     res = client.post(
         "/api/v1/auth/register",
-        json={"name": "Test Parent", "email": email, "password": "Passw0rd!"},
+        json={"name": "Test Parent", "username": username, "email": email, "password": "Passw0rd!"},
     )
     assert res.status_code == 201, res.get_json()
     data = res.get_json()["data"]
     return {
         "email": email,
+        "username": username,
         "accessToken": data["accessToken"],
         "refreshToken": data["refreshToken"],
         "userId": data["user"]["id"],
@@ -54,9 +57,10 @@ def registered_parent(client):
 
 @pytest.fixture()
 def child(client, registered_parent):
+    uid = uuid.uuid4().hex[:8]
     res = client.post(
         "/api/v1/parents/me/children",
-        json={"name": "Test Child", "classGrade": "Class 10", "targetBoard": "CBSE", "pin": "1234"},
+        json={"name": "Test Child", "username": f"child_{uid}", "classGrade": "Class 10", "targetBoard": "CBSE", "password": "Passw0rdChild1!"},
         headers=registered_parent["headers"],
     )
     assert res.status_code == 201, res.get_json()

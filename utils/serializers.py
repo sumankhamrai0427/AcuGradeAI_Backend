@@ -14,6 +14,7 @@ def student_to_child_account(student: Student, badge_ids: list[str] | None = Non
         "classGrade": student.class_grade,
         "targetBoard": student.target_board,
         "schoolName": student.school_name,
+        "schoolEmail": student.school_email,
         "dailyExamsTakenToday": student.daily_exams_taken_today,
         "lastExamDate": student.last_exam_date.isoformat() if student.last_exam_date else None,
         "totalExamsTaken": student.total_exams_taken,

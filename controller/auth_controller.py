@@ -16,7 +16,7 @@ from utils.response import success
 from utils.audit_helper import log_audit
 from utils.security import (
     hash_password, verify_password, create_access_token, create_refresh_token,
-    decode_token, verify_pin,
+    decode_token,
 )
 from utils.validators import require_fields, validate_email, validate_password_strength, validate_username
 
@@ -123,6 +123,11 @@ def register():
         existing_username = session.query(User).filter(func.lower(User.username) == func.lower(username)).first()
         if existing_username:
             raise AppError("USERNAME_TAKEN", "This username is already taken. Please choose another username.", 409)
+
+        # Check email uniqueness for parent / teacher
+        existing_email = session.query(User).filter(func.lower(User.email) == func.lower(email)).first()
+        if existing_email:
+            raise AppError("EMAIL_TAKEN", "An account with this email already exists.", 409)
 
         role = session.query(Role).filter(Role.role_name == role_name).first()
         if not role:
@@ -683,51 +688,8 @@ def get_registration_roles():
 
 @token_required
 def child_login():
-    """Verifies child PIN using Stored Procedure and mints a STUDENT-scoped JWT token."""
-    payload = request.get_json(force=True, silent=True) or {}
-    require_fields(payload, ["studentId", "pin"])
-
-    parent_id = g.current_user_id
-    student_id = int(payload["studentId"])
-
-    with get_session() as session:
-        student = session.execute(
-            text("CALL sp_get_child_for_login(:student_id, :parent_id)"),
-            {"student_id": student_id, "parent_id": parent_id}
-        ).mappings().first()
-
-        if not student:
-            raise AppError("NOT_FOUND", "Student not found or access denied", 404)
-        if not verify_pin(payload["pin"], student["pin_hash"]):
-            raise UnauthorizedError("Incorrect PIN", code="INVALID_PIN")
-
-        access_token = create_access_token(student["id"], "STUDENT")
-        page_access = _get_page_access(session, "STUDENT")
-
-        log_audit(
-            session,
-            action="CHILD_PIN_LOGIN",
-            user_id=student["id"],
-            entity_type="STUDENT",
-            entity_id=str(student["id"]),
-            request=request,
-        )
-        session.commit()
-
-        return success(
-            {
-                "tokens": {
-                    "accessToken": access_token,
-                    "tokenType": "Bearer",
-                    "expiresIn": config.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-                },
-                "accessToken": access_token,
-                "studentId": student["id"],
-                "pageAccess": page_access,
-            },
-            status_code=200,
-            message="Child authenticated successfully",
-        )
+    """Deprecated: Students must log in with their username and password on /login."""
+    raise AppError("DEPRECATED", "Child PIN login is deprecated. Students must log in with their Username and Password.", 400)
 
 
 def refresh():
