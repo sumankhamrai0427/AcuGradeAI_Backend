@@ -16,6 +16,7 @@ from utils.security import hash_password
 from utils.serializers import student_to_child_account, submission_to_dict, learning_path_node_to_dict
 from utils.constants import BOARD_CLASS_MAPPING
 from utils.validators import require_fields, validate_board, validate_class_grade, validate_board_class, validate_username, validate_email
+from controller.email_controller import send_school_student_registered_email
 
 
 def get_child_registration_options():
@@ -241,6 +242,18 @@ def add_child():
             request=request,
         )
         session.commit()
+
+        # Send notification email to school if school_email provided
+        if school_email:
+            send_school_student_registered_email(
+                to_school_email=school_email,
+                student_name=name,
+                class_grade=class_grade,
+                target_board=target_board,
+                school_name=school_name or "",
+                parent_name=parent_user.name if parent_user else "",
+                parent_email=parent_email or "",
+            )
 
         return success(student_to_child_account(student, []), 201)
 

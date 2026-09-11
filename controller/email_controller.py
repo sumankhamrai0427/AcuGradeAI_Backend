@@ -300,3 +300,68 @@ def send_password_changed_email(to_email: str, name: str = "", username: str = "
 
     send_email_async(to_email, subject, content_html, plain_text)
     return True
+
+
+def send_school_student_registered_email(
+    to_school_email: str,
+    student_name: str,
+    class_grade: str,
+    target_board: str,
+    school_name: str = "",
+    parent_name: str = "",
+    parent_email: str = "",
+) -> bool:
+    """Sends an official academic notification email to the school when a student is registered with their school email."""
+    if not to_school_email or not to_school_email.strip():
+        return False
+
+    display_student = student_name.strip() if student_name else "Student"
+    display_school = school_name.strip() if school_name else "Your Institution"
+    display_parent = parent_name.strip() if parent_name else "Parent / Guardian"
+    reg_date = datetime.now().strftime("%d %b %Y, %I:%M %p")
+    subject = f"🎓 Student Registration Notice: {display_student} registered in SahajPath"
+
+    school_info = f"<p style='margin: 4px 0;'><strong>School Name:</strong> {display_school}</p>" if school_name else ""
+    parent_info = f"<p style='margin: 4px 0;'><strong>Registered By:</strong> {display_parent} ({parent_email})</p>" if parent_email else f"<p style='margin: 4px 0;'><strong>Registered By:</strong> {display_parent}</p>"
+
+    content_html = f"""
+        <h2 style="color: #1e293b; margin-top: 0;">Student Academic Registration Notice 🎓</h2>
+        <p>Dear Administrator / Educator,</p>
+        <p>This is to inform you that <strong>{display_student}</strong> has been registered on the <strong>SahajPath</strong> Adaptive Learning & Diagnostic Assessment Platform affiliated with your institution.</p>
+        
+        <div class="card">
+            <h3 style="margin-top: 0; font-size: 15px; color: #334155;">📋 Student Academic Profile:</h3>
+            <p style="margin: 4px 0;"><strong>Student Name:</strong> {display_student}</p>
+            <p style="margin: 4px 0;"><strong>Class / Grade:</strong> {class_grade}</p>
+            <p style="margin: 4px 0;"><strong>Target Board:</strong> {target_board}</p>
+            {school_info}
+            {parent_info}
+            <p style="margin: 4px 0;"><strong>Registration Date:</strong> {reg_date}</p>
+        </div>
+
+        <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 14px 18px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 13px; color: #166534; font-weight: 500;">
+                💡 <strong>About SahajPath Diagnostic Platform:</strong><br>
+                SahajPath assists students in continuous curriculum mastery through adaptive 10-mark diagnostic exams, AI misconception classification, and evolutionary topic mastery tracking aligned with {target_board} standards.
+            </p>
+        </div>
+
+        <p style="color: #475569;">If you are an educator associated with this student, you can access diagnostic dossiers and learning paths to monitor academic progress.</p>
+        <p><strong>Warm regards,</strong><br>The SahajPath Academic Support Team</p>
+    """
+
+    plain_text = (
+        f"Dear Administrator / Educator,\n\n"
+        f"This is to notify you that {display_student} has been registered on the SahajPath platform.\n\n"
+        f"Student Name: {display_student}\n"
+        f"Class / Grade: {class_grade}\n"
+        f"Target Board: {target_board}\n"
+        f"School: {display_school}\n"
+        f"Registered By: {display_parent} ({parent_email})\n"
+        f"Date: {reg_date}\n\n"
+        f"Best regards,\nThe SahajPath Academic Support Team"
+    )
+
+    send_email_async(to_school_email.strip(), subject, content_html, plain_text)
+    return True
+
