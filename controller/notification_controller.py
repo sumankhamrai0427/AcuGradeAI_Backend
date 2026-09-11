@@ -5,7 +5,7 @@ from flask import g, request
 
 from database.dbConnection import get_session
 from middleware.authMiddleware import token_required
-from model.models import Notification, User
+from model.models import Notification, User, ScheduledExam
 from utils.errors import NotFoundError
 from utils.response import success
 
@@ -38,7 +38,22 @@ def create_notification(
     return notif
 
 
-def notification_to_dict(notif: Notification) -> dict:
+def notification_to_dict(notif: Notification, status_map: dict | None = None) -> dict:
+    meta = dict(notif.metadata_json or {})
+    seid = meta.get("scheduledExamId")
+    
+    if status_map and seid in status_map:
+        meta["status"] = status_map[seid]["status"]
+        if status_map[seid].get("submissionId"):
+            meta["submissionId"] = status_map[seid]["submissionId"]
+        if status_map[seid].get("examId"):
+            meta["examId"] = status_map[seid]["examId"]
+    elif not meta.get("status"):
+        if notif.type in ("SCHEDULED_EXAM_COMPLETED", "EXAM_SUBMITTED"):
+            meta["status"] = "SUBMITTED"
+        elif notif.type == "EXAM_ASSIGNED":
+            meta["status"] = "PENDING"
+
     return {
         "id": notif.id,
         "userId": notif.user_id,
@@ -47,7 +62,7 @@ def notification_to_dict(notif: Notification) -> dict:
         "title": notif.title,
         "message": notif.message,
         "actionUrl": notif.action_url,
-        "metadata": notif.metadata_json or {},
+        "metadata": meta,
         "isRead": bool(notif.is_read),
         "createdAt": notif.created_at.isoformat() if notif.created_at else None,
     }
@@ -71,8 +86,30 @@ def get_notifications():
             .count()
         )
 
+        # Batch lookup scheduled exams to enrich live status
+        scheduled_exam_ids = []
+        for n in notifs:
+            if n.metadata_json and isinstance(n.metadata_json, dict):
+                seid = n.metadata_json.get("scheduledExamId")
+                if seid:
+                    scheduled_exam_ids.append(seid)
+
+        status_map = {}
+        if scheduled_exam_ids:
+            sched_records = (
+                session.query(ScheduledExam)
+                .filter(ScheduledExam.id.in_(scheduled_exam_ids))
+                .all()
+            )
+            for s in sched_records:
+                status_map[s.id] = {
+                    "status": s.status or "PENDING",
+                    "submissionId": str(s.submission_id) if s.submission_id else None,
+                    "examId": str(s.exam_id) if s.exam_id else None,
+                }
+
         return success({
-            "notifications": [notification_to_dict(n) for n in notifs],
+            "notifications": [notification_to_dict(n, status_map) for n in notifs],
             "unreadCount": unread_count,
         })
 

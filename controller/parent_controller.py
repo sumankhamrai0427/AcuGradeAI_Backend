@@ -7,6 +7,7 @@ from sqlalchemy import text, func
 
 from database.dbConnection import get_session
 from helper.gamification_engine import calculate_and_sync_student_streak
+from helper.mastery_engine import get_topic_mastery_map
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import roles_required, assert_owns_student
 from datetime import datetime
@@ -93,15 +94,8 @@ def get_dashboard():
             child_dict["recentExams"] = child_exams
             all_recent_exams.extend(child_exams)
 
-            # Topic Mastery Map from learning_path_nodes
-            nodes = (
-                session.query(LearningPathNode)
-                .filter(LearningPathNode.student_id == child.id)
-                .all()
-            )
-            child_dict["topicMastery"] = {
-                n.topic: n.mastery_score for n in nodes
-            }
+            # Topic Mastery Map directly from Mastery table
+            child_dict["topicMastery"] = get_topic_mastery_map(session, child.id)
 
             enriched_children.append(child_dict)
 
@@ -165,10 +159,14 @@ def list_children():
             .filter(Student.parent_id == g.current_user_id)
             .all()
         )
+        enriched = []
         for c in children:
             calculate_and_sync_student_streak(session, c)
+            cd = student_to_child_account(c, _badge_ids_for(session, c.id))
+            cd["topicMastery"] = get_topic_mastery_map(session, c.id)
+            enriched.append(cd)
         session.commit()
-        return success([student_to_child_account(c, _badge_ids_for(session, c.id)) for c in children])
+        return success(enriched)
 
 
 @token_required

@@ -93,7 +93,6 @@ def generate_exam():
             session.flush()
 
         student.daily_exams_taken_today = (student.daily_exams_taken_today or 0) + 1
-        student.last_exam_date = date.today()
 
         log_audit(
             session,
