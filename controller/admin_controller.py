@@ -169,9 +169,22 @@ def list_users():
             if not student.user or student.id in student_user_ids:
                 continue
             student_user_ids.add(student.id)
+            is_active_val = bool(student.user.is_active) if student.user else True
+            created_at_val = (student.user.created_at or student.created_at) if student.user else student.created_at
             linked_students.setdefault(student.parent_id, []).append({
                 "id": student.id,
                 "name": student.user.name or student.user.username or "Student",
+                "username": student.user.username if student.user else "",
+                "email": student.user.email or "",
+                "classGrade": student.class_grade or "Class 10",
+                "targetBoard": student.target_board or "CBSE",
+                "schoolName": student.school_name or "",
+                "avatar": student.avatar or "🧑‍🎓",
+                "isActive": is_active_val,
+                "status": "Active" if is_active_val else "Inactive",
+                "createdAt": created_at_val.isoformat() if created_at_val else None,
+                "role": "Student",
+                "roleName": "STUDENT",
             })
 
         grouped_users = [user for user in all_users if user.id not in student_user_ids]
@@ -205,21 +218,42 @@ def update_user(user_id):
         if not user:
             raise NotFoundError("User not found")
 
-        if "name" in payload:
+        if "name" in payload and payload["name"]:
             user.name = str(payload["name"]).strip()
         if "email" in payload:
             user.email = str(payload["email"]).strip()
-        if "role" in payload:
+        if "isActive" in payload:
+            user.is_active = bool(payload["isActive"])
+        if "role" in payload and payload["role"]:
             role = session.query(Role).filter(Role.role_name == str(payload["role"]).upper()).first()
             if not role:
                 raise NotFoundError("Role not found")
             user.role = role
+
+        # If user is a student, update student specific fields as well
+        student = session.get(Student, user_id)
+        if student:
+            if "classGrade" in payload and payload["classGrade"]:
+                student.class_grade = str(payload["classGrade"]).strip()
+            if "targetBoard" in payload and payload["targetBoard"]:
+                student.target_board = str(payload["targetBoard"]).strip()
+            if "schoolName" in payload:
+                student.school_name = str(payload["schoolName"]).strip()
+            if "avatar" in payload and payload["avatar"]:
+                student.avatar = str(payload["avatar"]).strip()
 
         session.commit()
         return success({
             "id": user.id,
             "name": user.name,
             "email": user.email,
+            "username": user.username,
+            "isActive": user.is_active,
+            "status": "Active" if user.is_active else "Inactive",
+            "classGrade": student.class_grade if student else None,
+            "targetBoard": student.target_board if student else None,
+            "schoolName": student.school_name if student else None,
+            "avatar": student.avatar if student else None,
             "role": user.role.role_name.title() if user.role else "User",
             "roleName": user.role.role_name.upper() if user.role else "USER",
         })
