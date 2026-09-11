@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 import json
 import uuid
 from datetime import date, datetime, timedelta
@@ -65,26 +66,12 @@ def generate_exam():
         if scheduled_exam_id:
             scheduled_exam = session.get(ScheduledExam, scheduled_exam_id)
 
-        if not scheduled_exam:
-            # Check for any active pending scheduled exam matching student and subject (including aliases)
-            allowed_subject_variants = {normalized_sub, raw_subject, "General Science" if normalized_sub == "Science" else normalized_sub}
-            scheduled_exam = (
-                session.query(ScheduledExam)
-                .filter(
-                    ScheduledExam.student_id == student.id,
-                    ScheduledExam.status == "PENDING",
-                    ScheduledExam.subject.in_(allowed_subject_variants)
-                )
-                .order_by(ScheduledExam.created_at.desc())
-                .first()
-            )
-
         # Dynamic Question Count & Duration
-        req_q_count = payload.get("questionCount") or (scheduled_exam.question_count if scheduled_exam else None)
-        req_duration = payload.get("timeLimitMinutes") or (scheduled_exam.time_limit_minutes if scheduled_exam else None)
+        req_q_count = (scheduled_exam.question_count if scheduled_exam else None) or payload.get("questionCount")
+        req_duration = (scheduled_exam.time_limit_minutes if scheduled_exam else None) or payload.get("timeLimitMinutes")
         title = scheduled_exam.title if scheduled_exam else payload.get("title")
 
-        is_assigned_flag = bool(scheduled_exam or payload.get("scheduledExamId"))
+        is_assigned_flag = bool(scheduled_exam)
 
         exam = exam_generator.generate_exam(
             session,
@@ -163,7 +150,7 @@ def generate_quick_test():
                 session.query(ScheduledExam)
                 .filter(
                     ScheduledExam.student_id == student.id,
-                    ScheduledExam.status == "PENDING"
+                    ScheduledExam.status.in_(["PENDING", "IN_PROGRESS"])
                 )
                 .order_by(ScheduledExam.created_at.desc())
                 .first()
@@ -213,7 +200,6 @@ def generate_quick_test():
                 session.flush()
 
             student.daily_exams_taken_today = (student.daily_exams_taken_today or 0) + 1
-            student.last_exam_date = date.today()
 
             log_audit(
                 session,
@@ -269,7 +255,7 @@ def generate_quick_test():
             rag_knowledge_nodes_used=list({r.get("chapter_name") for r in sp_rows if r.get("chapter_name")}),
             source="rag-engine-curated",
             status="GENERATED",
-            created_at=datetime.utcnow(),
+            created_at=now_ist(),
         )
         session.add(exam)
         session.flush()
@@ -326,7 +312,6 @@ def generate_quick_test():
             session.flush()
 
         student.daily_exams_taken_today = (student.daily_exams_taken_today or 0) + 1
-        student.last_exam_date = date.today()
 
         log_audit(
             session,
@@ -395,7 +380,7 @@ def submit_exam(exam_id):
             id=str(uuid.uuid4()), exam_id=exam.id, student_id=exam.student_id, answers=answers,
             marks_obtained=marks_obtained, total_marks=exam.total_marks,
             accuracy_percentage=accuracy_percentage, time_taken_seconds=time_taken_seconds,
-            submitted_at=datetime.utcnow(),
+            submitted_at=now_ist(),
         )
         session.add(submission)
         session.flush()
@@ -430,21 +415,8 @@ def submit_exam(exam_id):
         )
         student.total_exams_taken = updated_total
 
-        # Daily Streak Logic: Based on consecutive calendar days
-        today = date.today()
-        if not student.last_exam_date:
-            student.streak_days = 1
-        elif student.last_exam_date == today:
-            # Same day practice preserves the current streak
-            student.streak_days = max(1, student.streak_days or 1)
-        elif student.last_exam_date == today - timedelta(days=1):
-            # Consecutive day practice increments the streak by 1
-            student.streak_days = (student.streak_days or 0) + 1
-        else:
-            # Missed a day or more, resets streak to 1
-            student.streak_days = 1
-
-        student.last_exam_date = today
+        # Daily Streak Logic: Based on distinct consecutive exam submission calendar dates (IST)
+        gamification_engine.calculate_and_sync_student_streak(session, student)
 
         # Server-side XP/badges
         xp_earned = gamification_engine.compute_exam_xp(marks_obtained, time_taken_seconds)
@@ -464,17 +436,15 @@ def submit_exam(exam_id):
         scheduled_exam = None
         if scheduled_exam_id:
             scheduled_exam = session.get(ScheduledExam, scheduled_exam_id)
-
+        
         if not scheduled_exam:
+            # Check if this exam was generated specifically for a scheduled exam record
             scheduled_exam = (
                 session.query(ScheduledExam)
-                .filter(
-                    ScheduledExam.student_id == student.id,
-                    ScheduledExam.status.in_(["PENDING", "IN_PROGRESS"]),
-                )
-                .order_by(ScheduledExam.created_at.desc())
+                .filter(ScheduledExam.exam_id == exam.id)
                 .first()
             )
+
         if scheduled_exam:
             scheduled_exam.status = "SUBMITTED"
             scheduled_exam.submission_id = submission.id
@@ -487,28 +457,29 @@ def submit_exam(exam_id):
                 Notification.is_read == False
             ).update({"is_read": True}, synchronize_session=False)
 
-        # Send Real-Time Notification to Parent
-        if student.parent_id:
-            notif_title = f"{student_name} completed {exam.subject} Exam! 🎯" if scheduled_exam else f"{student_name} completed an Exam! 🎯"
-            create_notification(
-                session=session,
-                user_id=student.parent_id,
-                sender_id=student.id,
-                notif_type="EXAM_SUBMITTED",
-                title=notif_title,
-                message=f"{student_name} completed the {exam.subject} test and scored {marks_obtained}/{exam.total_marks} ({accuracy_percentage}%).",
-                action_url="/reports",
-                metadata_json={
-                    "submissionId": str(submission.id),
-                    "examId": str(exam.id),
-                    "studentId": student.id,
-                    "studentName": student_name,
-                    "subject": exam.subject,
-                    "marksObtained": marks_obtained,
-                    "totalMarks": exam.total_marks,
-                    "accuracy": accuracy_percentage,
-                }
-            )
+            # Send Real-Time Notification to Parent ONLY for Parent-Scheduled Exams
+            if student.parent_id:
+                notif_title = f"{student_name} completed assigned {exam.subject} Exam! 📝"
+                create_notification(
+                    session=session,
+                    user_id=student.parent_id,
+                    sender_id=student.id,
+                    notif_type="SCHEDULED_EXAM_COMPLETED",
+                    title=notif_title,
+                    message=f"{student_name} completed your assigned {exam.subject} test and scored {marks_obtained}/{exam.total_marks} ({accuracy_percentage}%).",
+                    action_url="/reports",
+                    metadata_json={
+                        "scheduledExamId": scheduled_exam.id,
+                        "submissionId": str(submission.id),
+                        "examId": str(exam.id),
+                        "studentId": student.id,
+                        "studentName": student_name,
+                        "subject": exam.subject,
+                        "marksObtained": marks_obtained,
+                        "totalMarks": exam.total_marks,
+                        "accuracy": accuracy_percentage,
+                    }
+                )
 
         log_audit(
             session,

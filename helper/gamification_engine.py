@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 """XP, badges, and leaderboard. Ported from the frontend's original
 App.tsx `handleExamComplete` / `handleAwardXP` — the key difference is that
 here it runs server-side against persisted data, so the client can no longer
@@ -8,8 +9,54 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from model.models import Student, Badge, StudentBadge, XPEvent
+from model.models import Student, Badge, StudentBadge, XPEvent, ExamSubmission
 from utils.constants import BADGE_IDS
+
+
+def calculate_and_sync_student_streak(session: Session, student: Student) -> int:
+    """Calculates student streak based on distinct consecutive exam submission calendar dates (IST)
+    and synchronizes student.streak_days and student.last_exam_date."""
+    today = now_ist().date()
+    submissions = (
+        session.query(ExamSubmission.submitted_at)
+        .filter(ExamSubmission.student_id == student.id)
+        .order_by(ExamSubmission.submitted_at.desc())
+        .all()
+    )
+    if not submissions:
+        student.streak_days = 0
+        return 0
+
+    distinct_dates = sorted(
+        {sub.submitted_at.date() for sub in submissions if sub.submitted_at},
+        reverse=True
+    )
+    if not distinct_dates:
+        student.streak_days = 0
+        return 0
+
+    student.last_exam_date = distinct_dates[0]
+
+    streak = 0
+    most_recent = distinct_dates[0]
+    if most_recent == today:
+        current_check = today
+    elif most_recent == today - timedelta(days=1):
+        current_check = today - timedelta(days=1)
+    else:
+        # Most recent exam was before yesterday -> streak is 0
+        student.streak_days = 0
+        return 0
+
+    for d in distinct_dates:
+        if d == current_check:
+            streak += 1
+            current_check = current_check - timedelta(days=1)
+        elif d < current_check:
+            break
+
+    student.streak_days = streak
+    return streak
 
 
 def compute_exam_xp(marks_obtained: int, time_taken_seconds: int) -> int:
@@ -60,7 +107,7 @@ def evaluate_badge_unlocks(
         badge = session.get(Badge, badge_id)
         if badge is None:
             continue  # badge not seeded — skip rather than fail the whole submission
-        session.add(StudentBadge(student_id=student.id, badge_id=badge_id, unlocked_at=datetime.utcnow()))
+        session.add(StudentBadge(student_id=student.id, badge_id=badge_id, unlocked_at=now_ist()))
         if badge.xp_reward:
             award_xp(session, student, badge.xp_reward, f"badge:{badge_id}")
 
@@ -78,7 +125,7 @@ def get_leaderboard(session: Session, period: str = "all_time", limit: int = 50)
         scored = [(s, s.xp or 0) for s in students]
     else:
         window_days = {"daily": 1, "weekly": 7, "monthly": 30}.get(period, 3650)
-        since = datetime.utcnow() - timedelta(days=window_days)
+        since = now_ist() - timedelta(days=window_days)
         scored = []
         for s in students:
             window_xp = (

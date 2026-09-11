@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 """Student topic mastery tracking (master prompt §19). Upserts per-topic
 rows and always increments attempt/correct counters rather than overwriting
 history."""
@@ -35,7 +36,7 @@ def update_mastery_from_insights(session: Session, student_id: str, k_graph_insi
             row = Mastery(
                 student_id=student_id, topic=topic, mastery_score=new_score,
                 confidence=new_score, attempt_count=1, correct_count=1 if new_score >= 50 else 0,
-                status=_status_for_score(new_score), last_assessed_at=datetime.utcnow(),
+                status=_status_for_score(new_score), last_assessed_at=now_ist(),
             )
             session.add(row)
         else:
@@ -44,7 +45,7 @@ def update_mastery_from_insights(session: Session, student_id: str, k_graph_insi
             if new_score >= 50:
                 row.correct_count = (row.correct_count or 0) + 1
             row.status = _status_for_score(row.mastery_score)
-            row.last_assessed_at = datetime.utcnow()
+            row.last_assessed_at = now_ist()
 
         graph_db.upsert_mastery_edge(student_id, topic, float(row.mastery_score))
 

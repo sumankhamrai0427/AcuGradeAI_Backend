@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 from datetime import date
 
 from flask import g
@@ -57,7 +58,7 @@ def admin_dashboard():
         )
 
         # ── 1. Weekly Assessment Activity (Mon -> Sun) ──
-        today = datetime.utcnow().date()
+        today = now_ist().date()
         start_of_week = today - timedelta(days=today.weekday())
         days_map = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         weekly_activity = []

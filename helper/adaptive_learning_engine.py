@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 """Adaptive difficulty & learning-path updates (master prompt §20/§21).
 Thresholds are configurable via env vars (utils/config.py), not hardcoded,
 per §20's explicit requirement."""
@@ -61,6 +62,6 @@ def update_learning_path_after_submission(
             if mastery >= 80
             else "Diagnostic test detected conceptual nuances to reinforce with foundational practice."
         )
-        node.updated_at = datetime.utcnow()
+        node.updated_at = now_ist()
 
     session.flush()

@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 import uuid
 from datetime import datetime
 from flask import g, request
@@ -30,7 +31,7 @@ def create_notification(
         action_url=action_url,
         metadata_json=metadata_json,
         is_read=False,
-        created_at=datetime.utcnow(),
+        created_at=now_ist(),
     )
     session.add(notif)
     session.flush()

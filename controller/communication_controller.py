@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 import secrets
 import uuid
 from datetime import datetime, timedelta
@@ -192,7 +193,7 @@ def create_dossier():
             share_token=f"ACU-SHARE-{secrets.token_hex(4).upper()}",
             notes=payload.get("notes", ""), recipients=payload["recipients"],
             included_submissions_count=submissions_count, status="active",
-            created_at=datetime.utcnow(), expires_at=datetime.utcnow() + timedelta(days=30),
+            created_at=now_ist(), expires_at=now_ist() + timedelta(days=30),
         )
         session.add(dossier)
         session.flush()
@@ -216,7 +217,7 @@ def get_public_dossier(share_token):
         )
         if not dossier:
             raise NotFoundError("Academic dossier not found or link has expired")
-        if dossier.expires_at and dossier.expires_at < datetime.utcnow():
+        if dossier.expires_at and dossier.expires_at < now_ist():
             raise NotFoundError("This academic dossier share link has expired")
 
         student = session.get(Student, dossier.student_id)
@@ -243,7 +244,7 @@ def get_public_dossier(share_token):
 
         # Increment view count
         dossier.view_count = (getattr(dossier, 'view_count', 0) or 0) + 1
-        dossier.last_viewed_at = datetime.utcnow()
+        dossier.last_viewed_at = now_ist()
         session.flush()
 
         return success({
@@ -344,7 +345,7 @@ def schedule_ptm():
     try:
         scheduled_dt = datetime.fromisoformat(payload["scheduledAt"].replace("Z", "+00:00"))
     except Exception:
-        scheduled_dt = datetime.utcnow() + timedelta(days=1)
+        scheduled_dt = now_ist() + timedelta(days=1)
 
     meeting_code = secrets.token_hex(3)
     meeting_link = f"https://meet.google.com/acu-{meeting_code[:3]}-{meeting_code[3:]}"
@@ -364,7 +365,7 @@ def schedule_ptm():
             topic=payload["topic"][:250],
             meeting_link=meeting_link,
             status="SCHEDULED",
-            created_at=datetime.utcnow(),
+            created_at=now_ist(),
         )
         session.add(ptm)
         session.flush()

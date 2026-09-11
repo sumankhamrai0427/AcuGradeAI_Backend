@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 import uuid
 from datetime import datetime
 
@@ -93,7 +94,7 @@ def update_runbook(runbook_id):
             if json_key in payload:
                 setattr(rb, attr, payload[json_key])
         rb.version = (rb.version or 1) + 1
-        rb.updated_at = datetime.utcnow()
+        rb.updated_at = now_ist()
         return success(runbook_to_dict(rb), message="Runbook updated")
 
 

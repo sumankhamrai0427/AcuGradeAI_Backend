@@ -1,6 +1,7 @@
 from flask import g
 
 from database.dbConnection import get_session
+from helper.gamification_engine import calculate_and_sync_student_streak
 from helper.mastery_engine import get_topic_mastery_map
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import roles_required
@@ -20,6 +21,9 @@ def get_dashboard():
         student = session.get(Student, g.current_user_id)
         if not student:
             raise NotFoundError("Student not found")
+
+        calculate_and_sync_student_streak(session, student)
+        session.commit()
 
         from controller.auth_controller import get_page_access_for_role
 
@@ -57,6 +61,8 @@ def get_me():
         student = session.get(Student, g.current_user_id)
         if not student:
             raise NotFoundError("Student not found")
+        calculate_and_sync_student_streak(session, student)
+        session.commit()
         badge_ids = [r.badge_id for r in session.query(StudentBadge).filter(StudentBadge.student_id == student.id).all()]
         return success(student_to_child_account(student, badge_ids))
 
@@ -68,6 +74,8 @@ def my_overview():
         student = session.get(Student, g.current_user_id)
         if not student:
             raise NotFoundError("Student not found")
+        calculate_and_sync_student_streak(session, student)
+        session.commit()
         recent = (
             session.query(ExamSubmission)
             .filter(ExamSubmission.student_id == student.id)
@@ -93,13 +101,13 @@ def my_learning_path():
 @token_required
 @roles_required("STUDENT")
 def get_assigned_exams():
-    """Returns all pending exams assigned by parent to this student."""
+    """Returns all pending/in-progress exams assigned by parent to this student."""
     with get_session() as session:
         assigned = (
             session.query(ScheduledExam)
             .filter(
                 ScheduledExam.student_id == g.current_user_id,
-                ScheduledExam.status == "PENDING"
+                ScheduledExam.status.in_(["PENDING", "IN_PROGRESS"])
             )
             .order_by(ScheduledExam.created_at.desc())
             .all()

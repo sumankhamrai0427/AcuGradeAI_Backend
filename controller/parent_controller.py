@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 import json
 import uuid
 
@@ -5,6 +6,7 @@ from flask import request, g
 from sqlalchemy import text, func
 
 from database.dbConnection import get_session
+from helper.gamification_engine import calculate_and_sync_student_streak
 from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import roles_required, assert_owns_student
 from datetime import datetime
@@ -75,6 +77,7 @@ def get_dashboard():
         enriched_children = []
 
         for child in children:
+            calculate_and_sync_student_streak(session, child)
             badge_ids = _badge_ids_for(session, child.id)
             child_dict = student_to_child_account(child, badge_ids)
 
@@ -97,10 +100,12 @@ def get_dashboard():
                 .all()
             )
             child_dict["topicMastery"] = {
-                n.topic: float(n.mastery_score) for n in nodes if n.topic
+                n.topic: n.mastery_score for n in nodes
             }
 
             enriched_children.append(child_dict)
+
+        session.commit()
 
         # Sort all family exams globally by date
         all_recent_exams.sort(key=lambda x: x.get("submittedAt", ""), reverse=True)
@@ -160,6 +165,9 @@ def list_children():
             .filter(Student.parent_id == g.current_user_id)
             .all()
         )
+        for c in children:
+            calculate_and_sync_student_streak(session, c)
+        session.commit()
         return success([student_to_child_account(c, _badge_ids_for(session, c.id)) for c in children])
 
 
@@ -441,10 +449,23 @@ def schedule_exam():
             due_date=due_date,
             parent_instructions=parent_instructions,
             status="PENDING",
-            created_at=datetime.utcnow(),
+            created_at=now_ist(),
         )
         session.add(scheduled_exam)
         session.flush()
+
+        # Terminal Log Banner for Parent Scheduling (Windows console safe)
+        parent_user = session.get(User, g.current_user_id)
+        parent_name = parent_user.name if parent_user else f"Parent #{g.current_user_id}"
+        print("\n" + "=" * 78)
+        print("[*] [PARENT EXAM SCHEDULED LOG]")
+        print(f">> Assigned By : {parent_name} (Parent ID: {g.current_user_id})")
+        print(f">> Assigned To : {student_name} (Class {student.class_grade} | {student.target_board})")
+        print(f">> Subject     : {subject} (Topic: {chapter_topic or 'General Comprehensive'})")
+        print(f">> Config      : {question_count} Questions | {time_limit_minutes} Mins | Difficulty: {difficulty.upper()}")
+        print(f">> Due Date    : {due_date.strftime('%Y-%m-%d %H:%M') if due_date else 'No due date set'}")
+        print(f">> Schedule ID : {scheduled_exam.id}")
+        print("=" * 78 + "\n")
 
         # Send Real-Time Notification to Student
         from controller.notification_controller import create_notification

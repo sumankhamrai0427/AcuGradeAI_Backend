@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 from datetime import datetime
 
 from database.dbConnection import db_health_check
@@ -9,7 +10,7 @@ from utils.response import success
 def health():
     return success({
         "status": "ok",
-        "time": datetime.utcnow().isoformat(),
+        "time": now_ist().isoformat(),
         "database": "up" if db_health_check() else "down",
         "vectorStore": "enabled" if vector_db.is_enabled() else "disabled",
         "knowledgeGraph": "enabled" if graph_db.is_enabled() else "disabled",

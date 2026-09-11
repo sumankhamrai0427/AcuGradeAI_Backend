@@ -1,6 +1,5 @@
-"""Serializers that produce the exact camelCase shapes the frontend's
-types.ts already defines, so the React components need no restructuring."""
 from model.models import Student, ExamSubmission, LearningPathNode, Badge, Misconception, AuthorMaster, CategoryMaster, Blog
+from utils.date_helper import to_iso_ist
 
 
 def student_to_child_account(student: Student, badge_ids: list[str] | None = None) -> dict:
@@ -20,7 +19,7 @@ def student_to_child_account(student: Student, badge_ids: list[str] | None = Non
         "totalExamsTaken": student.total_exams_taken,
         "averageScore": float(student.average_score or 0),
         "streakDays": student.streak_days,
-        "createdAt": student.created_at.isoformat(),
+        "createdAt": to_iso_ist(student.created_at),
         "xp": student.xp,
         "level": student.level,
         "earnedBadgeIds": badge_ids or [],
@@ -102,7 +101,7 @@ def submission_to_dict(submission: ExamSubmission) -> dict:
         "totalMarks": submission.total_marks or (5 if (submission.exam and str(submission.exam.class_grade).lower() in ('class 1', 'class 2', 'class 3', 'class 4', '1', '2', '3', '4')) else 15),
         "accuracyPercentage": float(submission.accuracy_percentage or 0),
         "timeTakenSeconds": submission.time_taken_seconds or 0,
-        "submittedAt": submission.submitted_at.isoformat() if submission.submitted_at else "",
+        "submittedAt": to_iso_ist(submission.submitted_at),
         "evaluations": evaluations_list,
         "analysis": analysis_dict,
     }

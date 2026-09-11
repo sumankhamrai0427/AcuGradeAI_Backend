@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 import hashlib
 from datetime import datetime, timedelta
 
@@ -35,7 +36,7 @@ def _issue_tokens(session, user_id: int, role_name: str) -> dict:
     normalized_role = str(role_name).strip().upper()
     access_token = create_access_token(user_id, normalized_role)
     refresh_token = create_refresh_token(user_id, normalized_role)
-    expires_at = datetime.utcnow() + timedelta(days=config.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
+    expires_at = now_ist() + timedelta(days=config.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
 
     try:
         session.execute(
@@ -384,7 +385,7 @@ def reset_password():
                     target_email = parent_user.email
 
         user.password_hash = hash_password(new_password)
-        user.updated_at = datetime.utcnow()
+        user.updated_at = now_ist()
         session.commit()
 
         # Dispatch confirmation email if target email is available
@@ -426,7 +427,7 @@ def admin_reset_password():
             raise UnauthorizedError("Password reset only available for admin accounts here", code="FORBIDDEN_ROLE")
 
         user.password_hash = hash_password(new_password)
-        user.updated_at = datetime.utcnow()
+        user.updated_at = now_ist()
         session.commit()
 
         if user.email:

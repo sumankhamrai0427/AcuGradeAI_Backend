@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 """Misconception tracking (master prompt §18). Records what an incorrect
 answer suggests the student misunderstood, and closes the loop when later
 performance on the same topic improves."""
@@ -26,7 +27,7 @@ def record_misconceptions_from_evaluations(session: Session, student_id: str, ev
         )
         if existing:
             existing.evidence = f"Repeated on question: {ev['questionText'][:200]}"
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = now_ist()
             # Escalate severity on repeat occurrences
             if existing.severity == "LOW":
                 existing.severity = "MEDIUM"
@@ -60,6 +61,6 @@ def record_misconceptions_from_evaluations(session: Session, student_id: str, ev
         )
         for row in open_rows:
             row.status = "IMPROVING"
-            row.updated_at = datetime.utcnow()
+            row.updated_at = now_ist()
 
     session.flush()

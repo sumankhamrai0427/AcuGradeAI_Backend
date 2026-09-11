@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 """Blog controller handling CRUD operations for blogs, categories, and authors."""
 from datetime import datetime
 
@@ -47,7 +48,7 @@ def _admin_required(fn):
 
 def _parse_date(val):
     if not val:
-        return datetime.utcnow()
+        return now_ist()
     if isinstance(val, datetime):
         return val
     if isinstance(val, str):
@@ -69,7 +70,7 @@ def _parse_date(val):
             return datetime.fromisoformat(val_clean.replace("Z", "+00:00"))
         except Exception:
             pass
-    return datetime.utcnow()
+    return now_ist()
 
 
 def _resolve_author(session, payload: dict) -> AuthorMaster:
@@ -250,8 +251,8 @@ def create_blog():
             category_id=category.id,
             status=status,
             date=blog_date,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=now_ist(),
+            updated_at=now_ist(),
         )
         session.add(blog)
         session.flush()
@@ -341,7 +342,7 @@ def update_blog(blog_id: int):
         if "date" in payload:
             blog.date = _parse_date(payload["date"])
 
-        blog.updated_at = datetime.utcnow()
+        blog.updated_at = now_ist()
         session.flush()
 
         log_audit(
@@ -430,7 +431,7 @@ def update_category(category_id: int):
         if "isActive" in payload or "is_active" in payload:
             cat.is_active = bool(payload.get("isActive", payload.get("is_active")))
 
-        cat.updated_at = datetime.utcnow()
+        cat.updated_at = now_ist()
         session.flush()
         return success(category_to_dict(cat), message="Category updated successfully")
 

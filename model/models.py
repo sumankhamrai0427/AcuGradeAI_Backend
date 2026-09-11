@@ -32,7 +32,7 @@ class Role(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     role_name = Column(String(50), nullable=False, unique=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
     users = relationship("User", back_populates="role")
     menu_items = relationship("RolePageAccess", back_populates="role", cascade="all, delete-orphan")
@@ -49,7 +49,7 @@ class RolePageAccess(Base):
     icon = Column(String(50), nullable=True)
     menu_order = Column(Integer, default=1)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
     role = relationship("Role", back_populates="menu_items")
 
@@ -67,9 +67,9 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
     created_by = Column(Integer, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
     updated_by = Column(Integer, nullable=True)
 
     role = relationship("Role", back_populates="users")
@@ -83,7 +83,7 @@ class RefreshToken(Base):
     token_hash = Column(String(255), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     revoked = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
 
 # ------------------------------------------------------------
@@ -116,8 +116,8 @@ class Student(Base):
     streak_days = Column(Integer, default=0)
     xp = Column(Integer, default=250)
     level = Column(Integer, default=1)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
 
     parent = relationship("Parent", back_populates="children")
     user = relationship("User", foreign_keys=[id])
@@ -156,8 +156,8 @@ class Runbook(Base):
     status = Column(Enum("DRAFT", "PUBLISHED", "ARCHIVED", name="runbook_status"), default="PUBLISHED")
     version = Column(Integer, default=1)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
 
 
 class Document(Base):
@@ -172,7 +172,7 @@ class Document(Base):
     subject = Column(String(40), nullable=True)
     uploaded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     status = Column(Enum("PENDING", "PROCESSED", "FAILED", name="document_status"), default="PENDING")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
 
 class DocumentChunk(Base):
@@ -183,7 +183,7 @@ class DocumentChunk(Base):
     chunk_index = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
     vector_id = Column(String(100), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
 
 # ------------------------------------------------------------
@@ -208,7 +208,7 @@ class Exam(Base):
         Enum("GENERATED", "IN_PROGRESS", "SUBMITTED", "EXPIRED", name="exam_status"),
         default="GENERATED",
     )
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
     questions = relationship("Question", back_populates="exam", cascade="all, delete-orphan")
 
@@ -245,7 +245,7 @@ class ExamSubmission(Base):
     total_marks = Column(Integer, default=10)
     accuracy_percentage = Column(Numeric(5, 2), nullable=False)
     time_taken_seconds = Column(Integer, nullable=False)
-    submitted_at = Column(DateTime, default=datetime.utcnow)
+    submitted_at = Column(DateTime, default=get_ist_now)
 
     evaluations = relationship("QuestionEvaluation", cascade="all, delete-orphan")
     analysis = relationship("DiagnosticAnalysis", uselist=False, cascade="all, delete-orphan")
@@ -287,7 +287,7 @@ class DiagnosticAnalysis(Base):
     recommended_next_exam = Column(JSON, nullable=False)
     curated_study_links = Column(JSON, nullable=False)
     source = Column(Enum("mistral", "fallback", name="diagnostic_source"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
 
 # ------------------------------------------------------------
@@ -321,8 +321,8 @@ class Misconception(Base):
     evidence = Column(Text, nullable=True)
     severity = Column(Enum("LOW", "MEDIUM", "HIGH", name="misconception_severity"), default="MEDIUM")
     status = Column(Enum("OPEN", "IMPROVING", "RESOLVED", name="misconception_status"), default="OPEN")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
 
 
 class LearningPathNode(Base):
@@ -349,7 +349,7 @@ class LearningPathNode(Base):
     recommended_reason = Column(String(500), nullable=True)
     attempts_count = Column(Integer, default=0)
     last_score = Column(Integer, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
 
 
 # ------------------------------------------------------------
@@ -373,7 +373,7 @@ class StudentBadge(Base):
 
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), primary_key=True)
     badge_id = Column(String(60), ForeignKey("badges.id", ondelete="CASCADE"), primary_key=True)
-    unlocked_at = Column(DateTime, default=datetime.utcnow)
+    unlocked_at = Column(DateTime, default=get_ist_now)
 
 
 class XPEvent(Base):
@@ -383,7 +383,7 @@ class XPEvent(Base):
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
     amount = Column(Integer, nullable=False)
     reason = Column(String(190), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
 
 # ------------------------------------------------------------
@@ -397,7 +397,7 @@ class Conversation(Base):
     parent_id = Column(Integer, ForeignKey("parents.id", ondelete="CASCADE"), nullable=False)
     teacher_id = Column(Integer, ForeignKey("teachers.id", ondelete="CASCADE"), nullable=False)
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan",
                              order_by="Message.created_at")
@@ -414,7 +414,7 @@ class Message(Base):
     attached_submission_id = Column(String(36), ForeignKey("exam_submissions.id", ondelete="SET NULL"), nullable=True)
     action_items = Column(JSON, nullable=True)
     status = Column(Enum("sent", "delivered", "read", "action_taken", name="message_status"), default="sent")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
     conversation = relationship("Conversation", back_populates="messages")
 
@@ -432,7 +432,7 @@ class SharedDossier(Base):
     view_count = Column(Integer, default=0)
     last_viewed_at = Column(DateTime, nullable=True)
     status = Column(Enum("active", "revoked", name="dossier_status"), default="active")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
     expires_at = Column(DateTime, nullable=False)
 
     student = relationship("Student", foreign_keys=[student_id])
@@ -450,7 +450,7 @@ class PTMSchedule(Base):
     topic = Column(String(255), nullable=False)
     meeting_link = Column(String(255), nullable=True)
     status = Column(Enum("SCHEDULED", "COMPLETED", "CANCELLED", name="ptm_status"), default="SCHEDULED")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
 
     parent = relationship("Parent")
     teacher = relationship("Teacher")
@@ -480,8 +480,8 @@ class ScheduledExam(Base):
     status = Column(Enum("PENDING", "IN_PROGRESS", "SUBMITTED", "EXPIRED", name="scheduled_exam_status"), default="PENDING")
     exam_id = Column(String(36), ForeignKey("exams.id", ondelete="SET NULL"), nullable=True)
     submission_id = Column(String(36), ForeignKey("exam_submissions.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
 
     parent = relationship("Parent", foreign_keys=[parent_id])
     student = relationship("Student", foreign_keys=[student_id])
@@ -501,7 +501,7 @@ class Notification(Base):
     action_url = Column(String(200), nullable=True)
     metadata_json = Column(JSON, nullable=True)
     is_read = Column(Boolean, default=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=get_ist_now, index=True)
 
     user = relationship("User", foreign_keys=[user_id])
     sender = relationship("User", foreign_keys=[sender_id])
@@ -532,8 +532,8 @@ class BoardMaster(Base):
     board_name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
 
 
 class ClassMaster(Base):
@@ -542,8 +542,8 @@ class ClassMaster(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     class_name = Column(String(100), nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
 
 class AuthorMaster(Base):
     __tablename__ = "author_master"
@@ -551,8 +551,8 @@ class AuthorMaster(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
 
 
 class CategoryMaster(Base):
@@ -561,8 +561,8 @@ class CategoryMaster(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_ist_now)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
 
 
 # ------------------------------------------------------------
@@ -589,9 +589,9 @@ class Blog(Base):
     meta_keywords = Column(Text, nullable=True)
     canonical_url = Column(String(500), nullable=True)
     status = Column(Enum("Published", "Draft", name="blog_status"), default="Draft")
-    date = Column(DateTime, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    date = Column(DateTime, default=get_ist_now)
+    created_at = Column(DateTime, default=get_ist_now)
+    updated_at = Column(DateTime, default=get_ist_now, onupdate=get_ist_now)
 
     author = relationship("AuthorMaster")
     category = relationship("CategoryMaster")

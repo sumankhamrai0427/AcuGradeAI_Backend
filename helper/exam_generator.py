@@ -1,3 +1,4 @@
+from utils.date_helper import now_ist
 import json
 import random
 import uuid
@@ -160,20 +161,23 @@ def generate_exam(
         default_grade_marks = 15
         default_duration_mins = 15
 
-    is_assigned_challenge = is_assigned or (question_count is not None)
+    is_assigned_challenge = bool(is_assigned)
     target_question_count = question_count or default_q_count
 
     # ------------------------------------------------------------
     # 1. Primary Generation Layer: Relational Database Question Bank
     # ------------------------------------------------------------
-    questions_data = _fetch_questions_from_db(
+    db_questions = _fetch_questions_from_db(
         session,
         board=board,
         class_grade=class_grade,
         subject=subject,
         difficulty=difficulty,
     )
+    db_count = len(db_questions)
+    questions_data = list(db_questions)
     source = "rag-engine-curated"
+    llm_used = False
 
     # If DB questions found, slice or supplement
     if questions_data and len(questions_data) > target_question_count:
@@ -193,12 +197,14 @@ def generate_exam(
             validated = GeneratedExamSchema.model_validate(raw)
             questions_data = [q.model_dump() for q in validated.questions][:target_question_count]
             source = "mistral-rag"
+            llm_used = True
         except (mistral_client.MistralUnavailableError, PydanticValidationError) as exc:
             logger.error(f"Exam generation via Mistral failed, using fallback: {exc}")
 
     # ------------------------------------------------------------
     # 3. Deterministic Fallback Bank (Safety backup / full question complement)
     # ------------------------------------------------------------
+    fallback_used = False
     if not questions_data or len(questions_data) < target_question_count:
         ref_links = matching_runbooks[0].curated_reference_urls if matching_runbooks else []
         fallback_qs = fallback_exam_bank.build_fallback_questions(
@@ -210,6 +216,7 @@ def generate_exam(
             limit=target_question_count,
             force_mcq=is_assigned_challenge,
         )
+        fallback_used = True
         if not questions_data:
             questions_data = fallback_qs[:target_question_count]
         else:
@@ -221,7 +228,21 @@ def generate_exam(
                 if fq.get("questionText") not in existing_texts:
                     questions_data.append(fq)
 
-    # If parent assigned challenge, enforce 100% MCQ format (1 mark each, no hallucination)
+    # Determine visual source label for terminal tracking
+    if db_count >= len(questions_data):
+        source_label = "DATABASE (question_master / sp_generate_exam_from_db)"
+    elif llm_used:
+        source_label = "LLM (Mistral AI Engine)"
+    elif db_count == 0:
+        source_label = "FALLBACK_EXAM_BANK (fallback_exam_bank.py)"
+    else:
+        source_label = f"HYBRID ({db_count} from Database + {len(questions_data) - db_count} from Fallback)"
+
+    # Re-index questionNumber
+    for idx, q in enumerate(questions_data):
+        q["questionNumber"] = idx + 1
+
+    # If parent assigned challenge, enforce 100% MCQ format (1 mark each)
     if is_assigned_challenge:
         for q in questions_data:
             q["type"] = "mcq"
@@ -238,8 +259,47 @@ def generate_exam(
         calculated_marks = len(questions_data)
         exam_title = title or f"{class_grade} {board} {subject} ({difficulty.upper()}) Assigned {calculated_marks}-Mark Challenge"
     else:
-        calculated_marks = sum(int(q.get("marks", 1)) for q in questions_data) if questions_data and any("marks" in q for q in questions_data) else target_question_count
+        # Standard Diagnostic Blueprint:
+        # Class 1-4: 5 MCQs (1 Mark each) = 5 Marks Total
+        # Class 5-10: 5 MCQs (1 Mark each) + 5 SAQs (2 Marks each) = 15 Marks Total
+        # Class 11-12/NEET/IIT: 10 Questions (2 Marks each) = 20 Marks Total
+        if is_kid:
+            for q in questions_data:
+                q["marks"] = 1
+                q["type"] = "mcq"
+            calculated_marks = len(questions_data)
+        elif any(c in cg_lower for c in ["class 11", "class 12", "neet", "iit"]):
+            for q in questions_data:
+                q["marks"] = 2
+            calculated_marks = sum(int(q.get("marks", 2)) for q in questions_data)
+        else:
+            # Class 5 to 10
+            for idx, q in enumerate(questions_data):
+                if idx < 5:
+                    q["marks"] = 1
+                    q["type"] = "mcq"
+                else:
+                    q["marks"] = 2
+                    q["type"] = "saq"
+                    q["options"] = None
+            calculated_marks = sum(int(q.get("marks", 1)) for q in questions_data)
+
         exam_title = title or f"{class_grade} {board} {subject} ({difficulty.upper()}) Diagnostic {calculated_marks}-Mark Exam"
+
+    mcq_count = sum(1 for q in questions_data if q.get("type") == "mcq")
+    saq_count = sum(1 for q in questions_data if q.get("type") == "saq")
+    other_count = len(questions_data) - mcq_count - saq_count
+
+    # Terminal Log Banner (Windows console safe)
+    print("\n" + "=" * 78)
+    print("[*] [EXAM GENERATION LOG]")
+    print(f">> Candidate : {student_name} (ID: {student_id})")
+    print(f">> Target    : {board} | {class_grade} | {subject} (Difficulty: {difficulty})")
+    print(f">> Mode      : {'PARENT ASSIGNED CHALLENGE' if is_assigned_challenge else 'STUDENT DIAGNOSTIC BLUEPRINT'}")
+    print(f">> SOURCE    : >>> {source_label} <<<")
+    print(f">> Questions : {len(questions_data)} Total ({mcq_count} MCQs @ 1M, {saq_count} SAQs @ 2M{f', {other_count} Other' if other_count > 0 else ''})")
+    print(f">> Marks     : {calculated_marks} Marks Total | Time: {time_limit_minutes or default_duration_mins} Mins")
+    print("=" * 78 + "\n")
 
     exam_duration = time_limit_minutes or default_duration_mins
 
@@ -257,7 +317,7 @@ def generate_exam(
         rag_knowledge_nodes_used=[rb.chapter_name for rb in matching_runbooks],
         source=source,
         status="GENERATED",
-        created_at=datetime.utcnow(),
+        created_at=now_ist(),
     )
     session.add(exam)
     session.flush()
