@@ -89,9 +89,13 @@ def update_mastery_from_insights(session: Session, student_id: str, k_graph_insi
 
 
 def get_topic_mastery_map(session: Session, student_id: str) -> dict[str, float]:
-    try:
-        recalculate_student_mastery_from_evaluations(session, int(student_id))
-    except Exception:
-        pass
-    rows = session.query(Mastery).filter(Mastery.student_id == student_id).all()
+    """Fast indexed lookup of topic mastery. Only calculates if empty."""
+    sid = int(student_id) if isinstance(student_id, str) and student_id.isdigit() else student_id
+    rows = session.query(Mastery).filter(Mastery.student_id == sid).all()
+    if not rows:
+        try:
+            recalculate_student_mastery_from_evaluations(session, int(sid))
+            rows = session.query(Mastery).filter(Mastery.student_id == sid).all()
+        except Exception:
+            pass
     return {row.topic: float(row.mastery_score) for row in rows}

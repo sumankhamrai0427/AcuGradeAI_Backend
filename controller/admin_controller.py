@@ -11,7 +11,7 @@ from middleware.authMiddleware import token_required
 from middleware.roleMiddleware import roles_required
 from model.models import User, Student, Exam, ExamSubmission, Runbook, Role
 from utils.constants import BOARDS, CLASS_GRADES
-from utils.errors import NotFoundError
+from utils.errors import AppError, NotFoundError
 from utils.pagination import get_pagination_params, paginated_response
 from utils.response import success
 from utils.serializers import student_to_child_account
@@ -46,7 +46,10 @@ def admin_dashboard():
     from datetime import datetime, timedelta
 
     with get_session() as session:
-        total_users = session.query(User).count()
+        admin_roles = ["ADMIN", "SUPER_ADMIN"]
+        total_users = session.query(User).outerjoin(Role).filter(
+            or_(Role.role_name == None, ~Role.role_name.in_(admin_roles))
+        ).count()
         total_students = session.query(Student).count()
         total_exams = session.query(Exam).count()
         total_submissions = session.query(ExamSubmission).count()
@@ -123,10 +126,14 @@ def admin_dashboard():
 def list_users():
     page, limit, offset = get_pagination_params()
     with get_session() as session:
-        total = session.query(User).count()
-        users = session.query(User).order_by(User.created_at.desc()).offset(offset).limit(limit).all()
         search = request.args.get("search", "").strip()
-        query = session.query(User).outerjoin(Role)
+        admin_roles = ["ADMIN", "SUPER_ADMIN"]
+        
+        # Exclude administrative users (ADMIN, SUPER_ADMIN) so only platform end-users (Parents, Students, etc.) are listed
+        query = session.query(User).outerjoin(Role).filter(
+            or_(Role.role_name == None, ~Role.role_name.in_(admin_roles))
+        )
+        
         if search:
             search_pattern = f"%{search}%"
             student_user = aliased(User)
@@ -225,6 +232,8 @@ def delete_user(user_id):
         user = session.get(User, user_id)
         if not user:
             raise NotFoundError("User not found")
+        if user.role and user.role.role_name.upper() in ["ADMIN", "SUPER_ADMIN"]:
+            raise AppError("FORBIDDEN", "Admin accounts cannot be deleted from user management", 403)
         session.delete(user)
         session.commit()
         return success({"deleted": True, "id": user_id})
