@@ -436,6 +436,10 @@ def create_app() -> Flask:
     def api_chat():
         return chat_controller.chat()
 
+    @app.route("/api/v1/chat/suggestions", methods=["GET"])
+    def api_chat_suggestions():
+        return chat_controller.get_chat_suggestions()
+
     # ============================================================
     # 13. Document & File Upload Endpoints
     # ============================================================

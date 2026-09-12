@@ -85,6 +85,9 @@ def get_rag_status():
         total_docs = session.execute(text("SELECT COUNT(*) FROM documents")).scalar() or 0
         total_chunks = session.execute(text("SELECT COUNT(*) FROM document_chunks")).scalar() or 0
         total_runbooks = session.execute(text("SELECT COUNT(*) FROM runbooks WHERE status = 'PUBLISHED'")).scalar() or 0
+        total_topics = session.execute(
+            text("SELECT COUNT(DISTINCT topic) FROM questions WHERE topic IS NOT NULL AND topic != ''")
+        ).scalar() or 0
 
         # Query all documents with chunk count
         docs_sql = text("""
@@ -115,6 +118,7 @@ def get_rag_status():
 
         return success({
             "vector_store_enabled": vector_db.is_enabled(),
+            "total_topics": total_topics,
             "total_documents": total_docs,
             "total_chunks": total_chunks,
             "total_runbooks": total_runbooks,
