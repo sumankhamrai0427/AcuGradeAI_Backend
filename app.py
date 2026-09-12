@@ -428,6 +428,14 @@ def create_app() -> Flask:
     def api_admin_delete_rag_document(document_id):
         return upload_file_controller.delete_rag_document(document_id)
 
+    @app.route("/api/v1/admin/rag/generate-questions", methods=["POST"])
+    def api_admin_rag_generate_questions():
+        return upload_file_controller.generate_questions_from_doc_api()
+
+    @app.route("/api/v1/admin/rag/save-questions", methods=["POST"])
+    def api_admin_rag_save_questions():
+        return upload_file_controller.save_generated_questions_api()
+
 
     # ============================================================
     # 12. Chat Endpoints

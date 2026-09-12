@@ -160,13 +160,32 @@ def list_questions():
             conditions.append("t.id = :topic_id")
             params["topic_id"] = int(topic_id)
         if difficulty:
-            conditions.append("LOWER(dl.difficulty_level_name) = LOWER(:difficulty)")
-            params["difficulty"] = difficulty
+            diff_clean = difficulty.strip().lower()
+            if diff_clean in ["simple", "easy"]:
+                conditions.append("LOWER(dl.difficulty_level_name) IN ('easy', 'simple')")
+            else:
+                conditions.append("LOWER(dl.difficulty_level_name) = :difficulty")
+                params["difficulty"] = diff_clean
         if q_type:
             conditions.append("LOWER(qt.question_type_name) = LOWER(:q_type)")
             params["q_type"] = q_type
         if search:
-            conditions.append("(q.question LIKE :search OR q.explanation LIKE :search OR t.topic_name LIKE :search)")
+            search_conds = [
+                "q.question LIKE :search",
+                "q.explanation LIKE :search",
+                "q.correct_answer LIKE :search",
+                "t.topic_name LIKE :search",
+                "ch.chapter_name LIKE :search",
+                "s.subject_name LIKE :search",
+                "b.board_name LIKE :search",
+                "c.class_name LIKE :search",
+                "qt.question_type_name LIKE :search",
+                "dl.difficulty_level_name LIKE :search"
+            ]
+            if search.lower() in ["simple", "easy"]:
+                search_conds.append("LOWER(dl.difficulty_level_name) IN ('easy', 'simple')")
+
+            conditions.append(f"({' OR '.join(search_conds)})")
             params["search"] = f"%{search}%"
 
         where_clause = " AND ".join(conditions)
@@ -295,10 +314,11 @@ def create_question():
             effective_marks = default_marks if (marks is None or "marks" not in data) else marks
 
             # Resolve difficulty_id
+            diff_search = "easy" if difficulty_name in ["simple", "easy"] else difficulty_name
             diff_id = session.execute(
                 text("SELECT id FROM difficulty_level_master WHERE LOWER(difficulty_level_name) = :d LIMIT 1"),
-                {"d": difficulty_name}
-            ).scalar() or 2
+                {"d": diff_search}
+            ).scalar() or 1
 
             options_json = json.dumps(options) if options else None
 
@@ -383,9 +403,10 @@ def update_question(question_id):
                     params["type_id"] = type_id
 
             if difficulty_name:
+                diff_search = "easy" if difficulty_name.lower().strip() in ["simple", "easy"] else difficulty_name.lower().strip()
                 diff_id = session.execute(
                     text("SELECT id FROM difficulty_level_master WHERE LOWER(difficulty_level_name) = :d LIMIT 1"),
-                    {"d": difficulty_name.lower()}
+                    {"d": diff_search}
                 ).scalar()
                 if diff_id:
                     updates.append("difficulty_level_id = :diff_id")
@@ -629,7 +650,10 @@ def bulk_upload_questions():
 
                     # Difficulty
                     diff = str(row.get("difficulty", "medium")).strip().lower()
-                    diff_id = diff_dict.get(diff, diff_dict.get("medium", 2))
+                    if diff in ["simple", "easy"]:
+                        diff_id = diff_dict.get("easy", diff_dict.get("simple", 1))
+                    else:
+                        diff_id = diff_dict.get(diff, diff_dict.get("medium", 2))
 
                     # Marks
                     marks = 1

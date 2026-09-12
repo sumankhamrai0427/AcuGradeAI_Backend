@@ -156,3 +156,119 @@ def delete_rag_document(document_id):
 
         return success({"deleted": True, "id": document_id})
 
+
+@token_required
+@roles_required("ADMIN", "SUPER_ADMIN", "TEACHER")
+def generate_questions_from_doc_api():
+    """Generates structured questions from a document using LLM for review."""
+    from helper.pdf_question_generator import generate_questions_from_doc
+
+    data = request.json or {}
+    document_id = data.get("document_id")
+    count = int(data.get("count", 5))
+    question_type = data.get("type", "MCQ")
+    difficulty = data.get("difficulty", "medium")
+    custom_instructions = data.get("instructions", "")
+
+    if not document_id:
+        raise ValidationError("document_id is required")
+
+    with get_session() as session:
+        questions = generate_questions_from_doc(
+            session=session,
+            document_id=document_id,
+            count=count,
+            question_type=question_type,
+            difficulty=difficulty,
+            custom_instructions=custom_instructions,
+        )
+        return success({
+            "document_id": document_id,
+            "count": len(questions),
+            "questions": questions,
+        })
+
+
+@token_required
+@roles_required("ADMIN", "SUPER_ADMIN", "TEACHER")
+def save_generated_questions_api():
+    """Saves generated questions into question_master."""
+    import json
+    from sqlalchemy import text
+
+    data = request.json or {}
+    questions = data.get("questions", [])
+    topic_id = data.get("topic_id")
+
+    if not questions or not isinstance(questions, list):
+        raise ValidationError("questions list is required")
+
+    if not topic_id:
+        raise ValidationError("topic_id is required to link questions to curriculum")
+
+    saved_count = 0
+    with get_session() as session:
+        # Check topic validity
+        topic_exists = session.execute(
+            text("SELECT id FROM topic_master WHERE id = :t"),
+            {"t": topic_id}
+        ).scalar()
+        if not topic_exists:
+            raise ValidationError(f"Topic ID {topic_id} does not exist in topic_master")
+
+        # Type mapping cache
+        types_map = {
+            r[0].upper(): r[1] for r in session.execute(text("SELECT question_type_name, id FROM question_type_master")).fetchall()
+        }
+        # Difficulty mapping cache
+        diffs_map = {
+            r[0].lower(): r[1] for r in session.execute(text("SELECT difficulty_level_name, id FROM difficulty_level_master")).fetchall()
+        }
+
+        for q in questions:
+            q_text = (q.get("question") or "").strip()
+            if not q_text:
+                continue
+
+            q_type = (q.get("type") or "MCQ").upper()
+            type_id = types_map.get(q_type, 1)
+
+            q_diff = (q.get("difficulty") or "medium").lower()
+            if q_diff in ["simple", "easy"]:
+                diff_id = diffs_map.get("easy", diffs_map.get("simple", 1))
+            else:
+                diff_id = diffs_map.get(q_diff, 2)
+
+            options = q.get("options")
+            options_json = json.dumps(options) if options else None
+            correct_answer = (q.get("correct_answer") or "").strip()
+            explanation = (q.get("explanation") or "").strip()
+            marks = int(q.get("marks", 1))
+
+            ins_sql = text("""
+                INSERT INTO question_master 
+                (topic_id, question_type_id, difficulty_level_id, question, options, correct_answer, explanation, marks, is_active, created_at, updated_at)
+                VALUES 
+                (:topic_id, :type_id, :diff_id, :question, :options, :correct_answer, :explanation, :marks, 1, NOW(), NOW())
+            """)
+            session.execute(ins_sql, {
+                "topic_id": topic_id,
+                "type_id": type_id,
+                "diff_id": diff_id,
+                "question": q_text,
+                "options": options_json,
+                "correct_answer": correct_answer,
+                "explanation": explanation,
+                "marks": marks
+            })
+            saved_count += 1
+
+        session.commit()
+
+    return success({
+        "saved": True,
+        "saved_count": saved_count,
+        "message": f"Successfully added {saved_count} questions to Question Bank!"
+    }, 201)
+
+
