@@ -234,14 +234,10 @@ def create_blog():
 
         blog = Blog(
             title=title,
-            heading=heading,
             introduction=introduction,
             content=content,
-            subcategory=str(payload.get("subcategory") or "").strip() or None,
             image_url=str(payload.get("image_url") or payload.get("imageUrl") or "").strip() or None,
-            content_images=_normalize_list(payload.get("content_images") or payload.get("contentImages")),
             is_pinned=bool(payload.get("is_pinned", payload.get("isPinned", False))),
-            is_post=bool(payload.get("is_post", payload.get("isPost", status == "Published"))),
             tags=_normalize_list(payload.get("tags")),
             meta_title=str(payload.get("meta_title") or payload.get("metaTitle") or "").strip() or None,
             meta_description=str(payload.get("meta_description") or payload.get("metaDescription") or "").strip() or None,
@@ -288,9 +284,6 @@ def update_blog(blog_id: int):
                 raise ValidationError("Blog title cannot be empty")
             blog.title = clean_title
 
-        if "heading" in payload:
-            blog.heading = str(payload.get("heading") or blog.title).strip()
-
         if "introduction" in payload:
             blog.introduction = str(payload.get("introduction") or "").strip()
 
@@ -298,11 +291,8 @@ def update_blog(blog_id: int):
             blog.content = str(payload.get("content") or "").strip()
 
         field_map = {
-            "subcategory": "subcategory",
             "image_url": "image_url",
             "imageUrl": "image_url",
-            "content_images": "content_images",
-            "contentImages": "content_images",
             "tags": "tags",
             "meta_title": "meta_title",
             "metaTitle": "meta_title",
@@ -316,7 +306,7 @@ def update_blog(blog_id: int):
         for payload_key, model_key in field_map.items():
             if payload_key in payload:
                 value = payload[payload_key]
-                if model_key in ("content_images", "tags"):
+                if model_key == "tags":
                     value = _normalize_list(value)
                 elif isinstance(value, str):
                     value = value.strip() or None
@@ -324,8 +314,6 @@ def update_blog(blog_id: int):
 
         if "is_pinned" in payload or "isPinned" in payload:
             blog.is_pinned = bool(payload.get("is_pinned", payload.get("isPinned")))
-        if "is_post" in payload or "isPost" in payload:
-            blog.is_post = bool(payload.get("is_post", payload.get("isPost")))
 
         if any(k in payload for k in ("author", "author_id", "authorId", "authorName")):
             author = _resolve_author(session, payload)
@@ -480,3 +468,15 @@ def create_author():
         session.add(author)
         session.flush()
         return success(author_to_dict(author), status_code=201, message="Author created successfully")
+
+
+def increment_blog_share(blog_id: int):
+    """Increment share count for a blog post (public endpoint)."""
+    with get_session() as session:
+        blog = session.get(Blog, blog_id)
+        if not blog:
+            raise NotFoundError("Blog not found")
+        blog.shares_count = (blog.shares_count or 0) + 1
+        session.flush()
+        return success({"id": blog.id, "sharesCount": blog.shares_count}, message="Share recorded successfully")
+

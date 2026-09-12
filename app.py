@@ -502,6 +502,10 @@ def create_app() -> Flask:
     def api_blog_create_author():
         return blog_controller.create_author()
 
+    @app.route("/api/v1/blogs/<int:blog_id>/share", methods=["POST"])
+    def api_blog_share(blog_id):
+        return blog_controller.increment_blog_share(blog_id)
+
     return app
 
 
