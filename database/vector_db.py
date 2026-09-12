@@ -13,6 +13,13 @@ _collection = None
 _enabled = False
 
 try:
+    # NumPy 2.0 backward compatibility shim
+    import numpy as np
+    if not hasattr(np, "float_"):
+        np.float_ = np.float64
+    if not hasattr(np, "int_"):
+        np.int_ = np.int64
+
     import chromadb
     from chromadb.config import Settings
 

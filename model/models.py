@@ -595,3 +595,23 @@ class Blog(Base):
 
     author = relationship("AuthorMaster")
     category = relationship("CategoryMaster")
+
+
+# ------------------------------------------------------------
+# 13. Question Upload Batches & Ingestion Audit
+# ------------------------------------------------------------
+class QuestionUploadBatch(Base):
+    __tablename__ = "question_upload_batches"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    file_name = Column(String(255), nullable=False)
+    file_size_bytes = Column(Integer, default=0)
+    total_rows = Column(Integer, default=0)
+    inserted_count = Column(Integer, default=0)
+    updated_count = Column(Integer, default=0)
+    duplicate_skipped_count = Column(Integer, default=0)
+    status = Column(String(50), default="SUCCESS")
+    uploaded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=get_ist_now)
+
+    uploader = relationship("User", foreign_keys=[uploaded_by])

@@ -25,6 +25,7 @@ from controller import (
     chat_controller,
     blog_controller,
     notification_controller,
+    curriculum_controller,
 )
 from middleware.dbContext import register_db_teardown
 from middleware.errorMiddleware import register_error_handlers
@@ -383,6 +384,49 @@ def create_app() -> Flask:
     @app.route("/api/v1/admin/audit-logs", methods=["GET"])
     def api_admin_list_audit_logs():
         return admin_controller.list_audit_logs()
+
+    # ============================================================
+    # 11.5 Curriculum & Question Bank Endpoints
+    # ============================================================
+    @app.route("/api/v1/admin/curriculum/tree", methods=["GET"])
+    def api_admin_curriculum_tree():
+        return curriculum_controller.get_curriculum_tree()
+
+    @app.route("/api/v1/admin/questions", methods=["GET"])
+    def api_admin_list_questions():
+        return curriculum_controller.list_questions()
+
+    @app.route("/api/v1/admin/questions", methods=["POST"])
+    def api_admin_create_question():
+        return curriculum_controller.create_question()
+
+    @app.route("/api/v1/admin/questions/<int:question_id>", methods=["PUT"])
+    def api_admin_update_question(question_id):
+        return curriculum_controller.update_question(question_id)
+
+    @app.route("/api/v1/admin/questions/<int:question_id>", methods=["DELETE"])
+    def api_admin_delete_question(question_id):
+        return curriculum_controller.delete_question(question_id)
+
+    @app.route("/api/v1/admin/questions/bulk-upload", methods=["POST"])
+    def api_admin_bulk_upload_questions():
+        return curriculum_controller.bulk_upload_questions()
+
+    @app.route("/api/v1/admin/questions/bulk-upload-stream", methods=["POST"])
+    def api_admin_bulk_upload_questions_stream():
+        return curriculum_controller.bulk_upload_questions_stream()
+
+    @app.route("/api/v1/admin/questions/upload-history", methods=["GET"])
+    def api_admin_get_question_upload_history():
+        return curriculum_controller.get_upload_history()
+
+    @app.route("/api/v1/admin/rag/status", methods=["GET"])
+    def api_admin_rag_status():
+        return upload_file_controller.get_rag_status()
+
+    @app.route("/api/v1/admin/rag/documents/<document_id>", methods=["DELETE"])
+    def api_admin_delete_rag_document(document_id):
+        return upload_file_controller.delete_rag_document(document_id)
 
 
     # ============================================================
