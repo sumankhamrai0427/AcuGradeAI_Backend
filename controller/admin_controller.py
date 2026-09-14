@@ -155,6 +155,34 @@ def list_users():
                 matching_child,
             ))
 
+        flat = request.args.get("flat", "").lower() in ["true", "1"]
+        if flat:
+            total = query.count()
+            users = query.options(joinedload(User.role)).order_by(User.created_at.desc()).offset(offset).limit(limit).all()
+            student_ids = [u.id for u in users]
+            students_map = {
+                s.id: s for s in session.query(Student).filter(Student.id.in_(student_ids)).all()
+            } if student_ids else {}
+
+            items = [
+                {
+                    "id": u.id,
+                    "name": u.name or u.username or "User",
+                    "username": u.username,
+                    "email": u.email or "—",
+                    "role": (u.role.role_name if u.role else "User").title(),
+                    "roleName": (u.role.role_name if u.role else "USER").upper(),
+                    "isActive": bool(u.is_active),
+                    "status": "Active" if u.is_active else "Inactive",
+                    "createdAt": u.created_at.isoformat() if u.created_at else None,
+                    "classGrade": students_map[u.id].class_grade if u.id in students_map else None,
+                    "targetBoard": students_map[u.id].target_board if u.id in students_map else None,
+                    "avatar": students_map[u.id].avatar if u.id in students_map else None,
+                }
+                for u in users
+            ]
+            return success(paginated_response(items, total, page, limit))
+
         # Build the complete parent-child relationship before paginating top-level
         # rows. Student users are represented under their parent rather than as
         # duplicate standalone rows.
@@ -268,6 +296,15 @@ def delete_user(user_id):
             raise NotFoundError("User not found")
         if user.role and user.role.role_name.upper() in ["ADMIN", "SUPER_ADMIN"]:
             raise AppError("FORBIDDEN", "Admin accounts cannot be deleted from user management", 403)
+
+        # If user is a Parent, also clean up all linked Student user accounts & student records
+        linked_students = session.query(Student).filter(Student.parent_id == user.id).all()
+        for st in linked_students:
+            st_user = session.get(User, st.id)
+            session.delete(st)
+            if st_user:
+                session.delete(st_user)
+
         session.delete(user)
         session.commit()
         return success({"deleted": True, "id": user_id})
