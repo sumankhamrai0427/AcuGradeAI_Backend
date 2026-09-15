@@ -25,6 +25,16 @@ def ingest_document(
     uploaded_by: str,
 ) -> Document:
     ext = document_processor.validate_upload(filename, len(file_bytes))
+    raw_text = document_processor.extract_text(file_bytes, ext)
+
+    # Validate that PDF content matches target Board, Class, and Subject
+    document_processor.validate_curriculum_metadata(
+        filename=filename,
+        raw_text=raw_text,
+        target_board=board,
+        target_class=class_grade,
+        target_subject=subject,
+    )
 
     document = Document(
         id=str(uuid.uuid4()),
@@ -41,7 +51,6 @@ def ingest_document(
     session.flush()
 
     try:
-        raw_text = document_processor.extract_text(file_bytes, ext)
         cleaned = document_processor.clean_text(raw_text)
         chunks = document_processor.chunk_text(cleaned)
 
