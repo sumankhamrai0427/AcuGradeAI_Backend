@@ -138,37 +138,99 @@ def validate_curriculum_metadata(
     target_subject: str | None,
 ):
     """Validates that target dropdown values match detected content in file/text."""
-    sample = raw_text[:10000] if raw_text else ""
-    detected = detect_curriculum_metadata(filename, sample)
+    norm_fn = re.sub(r"[-_.]", " ", filename or "").lower()
+    norm_sample = re.sub(r"[-_.]", " ", (raw_text or "")[:10000]).lower()
+    combined = f"{norm_fn} {norm_sample}".strip()
 
-    # 1. Board mismatch check (NCERT and CBSE share curriculum books, so tolerate CBSE <-> NCERT)
-    if target_board and detected["board"]:
+    if not combined:
+        return
+
+    # 1. Validate Board
+    if target_board:
         t_board = target_board.upper().strip()
-        d_board = detected["board"].upper().strip()
-        is_ncert_cbse_compatible = (t_board in ["CBSE", "NCERT"] and d_board in ["CBSE", "NCERT"])
-        if t_board != d_board and not is_ncert_cbse_compatible:
-            raise ValidationError(
-                f"Board Mismatch: Document content/filename indicates '{detected['board']}', "
-                f"but '{target_board}' was selected in the dropdown. Please select the matching Board."
-            )
+        t_patterns = BOARD_PATTERNS.get(t_board, [])
+        t_matched = any(re.search(p, combined, re.IGNORECASE) for p in t_patterns)
 
-    # 2. Class mismatch check
-    if target_class and detected["classGrade"]:
-        t_class = target_class.lower().replace(" ", "").strip()
-        d_class = detected["classGrade"].lower().replace(" ", "").strip()
-        if t_class != d_class:
-            raise ValidationError(
-                f"Class Mismatch: Document content/filename indicates '{detected['classGrade']}', "
-                f"but '{target_class}' was selected in the dropdown. Please select '{detected['classGrade']}'."
-            )
+        # Check council/board compatibility
+        if not t_matched:
+            if t_board in ["CBSE", "NCERT"] and any(re.search(p, combined, re.IGNORECASE) for p in BOARD_PATTERNS.get("NCERT", []) + BOARD_PATTERNS.get("CBSE", [])):
+                t_matched = True
+            elif t_board in ["ICSE", "ISC"] and any(re.search(p, combined, re.IGNORECASE) for p in BOARD_PATTERNS.get("ICSE", []) + BOARD_PATTERNS.get("ISC", [])):
+                t_matched = True
 
-    # 3. Subject mismatch check
-    if target_subject and detected["subject"]:
-        t_sub = target_subject.lower().strip()
-        d_sub = detected["subject"].lower().strip()
-        is_science_compatible = (t_sub == "science" and d_sub in ["physics", "chemistry", "biology", "science"])
-        if t_sub != d_sub and not is_science_compatible:
-            raise ValidationError(
-                f"Subject Mismatch: Document content indicates '{detected['subject']}', "
-                f"but '{target_subject}' was selected in the dropdown. Please select '{detected['subject']}'."
-            )
+        # If target board did not match, check if another distinct board was explicitly detected
+        if not t_matched:
+            detected_other_board = None
+            for check_str in [norm_fn, norm_sample[:1500]]:
+                for b_name, patterns in BOARD_PATTERNS.items():
+                    if b_name == t_board:
+                        continue
+                    if (t_board in ["CBSE", "NCERT"] and b_name in ["CBSE", "NCERT"]):
+                        continue
+                    if (t_board in ["ICSE", "ISC"] and b_name in ["ICSE", "ISC"]):
+                        continue
+                    if any(re.search(p, check_str, re.IGNORECASE) for p in patterns):
+                        detected_other_board = b_name
+                        break
+                if detected_other_board:
+                    break
+
+            if detected_other_board:
+                raise ValidationError(
+                    f"Board Mismatch: Document content/filename indicates '{detected_other_board}', "
+                    f"but '{target_board}' was selected in the dropdown. Please select the matching Board."
+                )
+
+    # 2. Validate Class
+    if target_class:
+        t_class = target_class.strip()
+        t_patterns = CLASS_PATTERNS.get(t_class, [])
+        t_matched = any(re.search(p, combined, re.IGNORECASE) for p in t_patterns)
+
+        if not t_matched:
+            detected_other_class = None
+            for check_str in [norm_fn, norm_sample[:1500]]:
+                for c_name, patterns in CLASS_PATTERNS.items():
+                    if c_name.lower().replace(" ", "") == t_class.lower().replace(" ", ""):
+                        continue
+                    if any(re.search(p, check_str, re.IGNORECASE) for p in patterns):
+                        detected_other_class = c_name
+                        break
+                if detected_other_class:
+                    break
+
+            if detected_other_class:
+                raise ValidationError(
+                    f"Class Mismatch: Document content/filename indicates '{detected_other_class}', "
+                    f"but '{target_class}' was selected in the dropdown. Please select '{detected_other_class}'."
+                )
+
+    # 3. Validate Subject
+    if target_subject:
+        t_sub = target_subject.strip()
+        t_patterns = SUBJECT_PATTERNS.get(t_sub, [])
+        t_matched = any(re.search(p, combined, re.IGNORECASE) for p in t_patterns)
+
+        if not t_matched and t_sub.lower() == "science":
+            if any(re.search(p, combined, re.IGNORECASE) for p in SUBJECT_PATTERNS.get("Physics", []) + SUBJECT_PATTERNS.get("Chemistry", []) + SUBJECT_PATTERNS.get("Biology", [])):
+                t_matched = True
+
+        if not t_matched:
+            detected_other_subject = None
+            for check_str in [norm_fn, norm_sample[:1500]]:
+                for s_name, patterns in SUBJECT_PATTERNS.items():
+                    if s_name.lower() == t_sub.lower():
+                        continue
+                    if t_sub.lower() == "science" and s_name in ["Physics", "Chemistry", "Biology"]:
+                        continue
+                    if any(re.search(p, check_str, re.IGNORECASE) for p in patterns):
+                        detected_other_subject = s_name
+                        break
+                if detected_other_subject:
+                    break
+
+            if detected_other_subject:
+                raise ValidationError(
+                    f"Subject Mismatch: Document content/filename indicates '{detected_other_subject}', "
+                    f"but '{target_subject}' was selected in the dropdown. Please select '{detected_other_subject}'."
+                )
