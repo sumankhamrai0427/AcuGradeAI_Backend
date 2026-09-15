@@ -1,15 +1,24 @@
-"""Text extraction + chunking for uploaded curriculum documents
-(master prompt §11/§29). Supports PDF, DOCX, TXT, CSV."""
+"""Text extraction + chunking for uploaded curriculum documents.
+Supports PDF (.pdf), Word (.docx, .doc), Rich Text (.rtf), Plain Text (.txt), and CSV (.csv).
+"""
 import csv
 import io
+import re
 
 from pypdf import PdfReader
 from docx import Document as DocxDocument
 
+try:
+    import importlib
+    _striprtf_mod = importlib.import_module("striprtf.striprtf")
+    rtf_to_text = getattr(_striprtf_mod, "rtf_to_text", None)
+except Exception:
+    rtf_to_text = None
+
 from utils.errors import ValidationError
 
-ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "csv"}
-MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
+ALLOWED_EXTENSIONS = {"pdf", "docx", "doc", "rtf", "txt", "csv"}
+MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 CHUNK_SIZE_CHARS = 1200
 CHUNK_OVERLAP_CHARS = 150
 
@@ -19,23 +28,126 @@ def validate_upload(filename: str, content_length: int):
     if ext not in ALLOWED_EXTENSIONS:
         raise ValidationError(f"Unsupported file type '.{ext}'. Allowed: {sorted(ALLOWED_EXTENSIONS)}")
     if content_length > MAX_FILE_SIZE_BYTES:
-        raise ValidationError("File exceeds the 20MB upload limit")
+        raise ValidationError("File exceeds the 50MB upload limit")
     return ext
 
 
+def extract_rtf_text(file_bytes: bytes) -> str:
+    """Extracts clean plain text from Rich Text Format (.rtf) files."""
+    if rtf_to_text:
+        try:
+            raw_str = file_bytes.decode("latin-1", errors="ignore")
+            extracted = rtf_to_text(raw_str)
+            if extracted and extracted.strip():
+                return extracted.strip()
+        except Exception:
+            pass
+
+    # Built-in robust regex RTF parser fallback
+    try:
+        raw_str = file_bytes.decode("latin-1", errors="ignore")
+        # Remove destinations like {\*\generator...}, font tables, color tables
+        raw_str = re.sub(r'\{\\\*(?:(?!\})[\s\S])*\}', '', raw_str)
+        raw_str = re.sub(r'\{\\(?:fonttbl|colortbl|stylesheet|info|pict)(?:(?!\})[\s\S])*\}', '', raw_str)
+        # Convert Unicode escapes \u1234?
+        raw_str = re.sub(
+            r'\\u(-?\d+)\??',
+            lambda m: chr(int(m.group(1)) if int(m.group(1)) >= 0 else int(m.group(1)) + 65536)
+            if 0 <= (int(m.group(1)) if int(m.group(1)) >= 0 else int(m.group(1)) + 65536) <= 0x10FFFF else '',
+            raw_str
+        )
+        # Convert hex escapes \'hh
+        raw_str = re.sub(r"\\\'([0-9a-fA-F]{2})", lambda m: bytes.fromhex(m.group(1)).decode('latin-1', errors='ignore'), raw_str)
+        # Replace line breaks and tabs
+        raw_str = re.sub(r'\\(?:par|line|page)\b', '\n', raw_str)
+        raw_str = re.sub(r'\\tab\b', '\t', raw_str)
+        # Remove remaining control words
+        raw_str = re.sub(r'\\[a-zA-Z]+-?\d*\s?', '', raw_str)
+        # Remove braces
+        raw_str = re.sub(r'[{}]', '', raw_str)
+        return raw_str.strip()
+    except Exception:
+        return file_bytes.decode("utf-8", errors="ignore")
+
+
+def extract_doc_text(file_bytes: bytes) -> str:
+    """Extracts text from Word documents (.doc legacy binary or renamed .docx)."""
+    # 1. First attempt: OpenXML docx parser
+    try:
+        doc = DocxDocument(io.BytesIO(file_bytes))
+        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+        for table in doc.tables:
+            for row in table.rows:
+                row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                if row_text:
+                    paragraphs.append(row_text)
+        if paragraphs:
+            return "\n".join(paragraphs)
+    except Exception:
+        pass
+
+    # 2. Second attempt: Extract text stream runs from Word binary format (.doc)
+    try:
+        text_parts = []
+        # Word binary documents store text in UTF-16LE runs
+        utf16_runs = re.findall(b'(?:[\x20-\x7E\r\n\t]\x00){4,}', file_bytes)
+        for run in utf16_runs:
+            try:
+                decoded = run.decode('utf-16le', errors='ignore').strip()
+                if len(decoded) > 3 and not decoded.startswith(('Root Entry', 'WordDocument', 'SummaryInformation', 'CompObj')):
+                    text_parts.append(decoded)
+            except Exception:
+                pass
+
+        if text_parts:
+            return "\n".join(text_parts)
+
+        # Fallback to printable ASCII runs
+        ascii_runs = re.findall(b'[\x20-\x7E\r\n\t]{6,}', file_bytes)
+        for run in ascii_runs:
+            decoded = run.decode('latin-1', errors='ignore').strip()
+            if decoded and not any(meta in decoded for meta in ['CompObj', 'WordDocument', 'ObjectPool']):
+                text_parts.append(decoded)
+        return "\n".join(text_parts)
+    except Exception:
+        return file_bytes.decode("utf-8", errors="ignore")
+
+
 def extract_text(file_bytes: bytes, ext: str) -> str:
+    """Extracts text from uploaded files based on extension."""
     if ext == "pdf":
         reader = PdfReader(io.BytesIO(file_bytes))
         return "\n".join(page.extract_text() or "" for page in reader.pages)
+    
     if ext == "docx":
         doc = DocxDocument(io.BytesIO(file_bytes))
-        return "\n".join(p.text for p in doc.paragraphs)
+        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+        for table in doc.tables:
+            for row in table.rows:
+                row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                if row_text:
+                    paragraphs.append(row_text)
+        return "\n".join(paragraphs)
+
+    if ext == "doc":
+        return extract_doc_text(file_bytes)
+
+    if ext == "rtf":
+        return extract_rtf_text(file_bytes)
+
     if ext == "txt":
+        for encoding in ("utf-8", "utf-16", "cp1252", "latin-1"):
+            try:
+                return file_bytes.decode(encoding)
+            except (UnicodeDecodeError, LookupError):
+                continue
         return file_bytes.decode("utf-8", errors="ignore")
+
     if ext == "csv":
         text_stream = io.StringIO(file_bytes.decode("utf-8", errors="ignore"))
         reader = csv.reader(text_stream)
         return "\n".join(", ".join(row) for row in reader)
+
     raise ValidationError(f"No extractor implemented for '.{ext}'")
 
 
@@ -58,8 +170,6 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE_CHARS, overlap: int = CHU
         start = end - overlap
     return chunks
 
-
-import re
 
 BOARD_PATTERNS = {
     "CBSE": [r"\bcbse\b", r"central\s+board\s+of\s+secondary\s+education"],

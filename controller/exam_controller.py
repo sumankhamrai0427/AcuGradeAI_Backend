@@ -1,5 +1,6 @@
 from utils.date_helper import now_ist
 import json
+import re
 import uuid
 from datetime import date, datetime, timedelta
 
@@ -69,6 +70,7 @@ def generate_exam():
         # Dynamic Question Count & Duration
         req_q_count = (scheduled_exam.question_count if scheduled_exam else None) or payload.get("questionCount")
         req_duration = (scheduled_exam.time_limit_minutes if scheduled_exam else None) or payload.get("timeLimitMinutes")
+        req_topic = payload.get("chapterTopic") or payload.get("topic") or (scheduled_exam.chapter_topic if scheduled_exam else None)
         title = scheduled_exam.title if scheduled_exam else payload.get("title")
 
         is_assigned_flag = bool(scheduled_exam)
@@ -85,6 +87,7 @@ def generate_exam():
             time_limit_minutes=int(req_duration) if req_duration else None,
             title=title,
             is_assigned=is_assigned_flag,
+            chapter_topic=req_topic,
         )
 
         if scheduled_exam:
@@ -128,12 +131,21 @@ def generate_quick_test():
     with get_session() as session:
         student = _resolve_student_for_request(session, payload)
 
-        is_kid = (student.class_grade or '').strip().lower() in ['class 1', 'class 2', 'class 3', 'class 4']
+        # Tier determination using regex
+        cg_clean = (student.class_grade or '').strip().lower()
+        is_senior = any(k in cg_clean for k in ['class 11', 'class 12', 'grade 11', 'grade 12', 'neet', 'iit', 'jee'])
+        match_cg = re.search(r'(?:class|grade)?\s*(\d+)', cg_clean)
+        cnum = int(match_cg.group(1)) if match_cg else 5
+        is_kid = (1 <= cnum <= 4) and not is_senior
+        if cnum >= 11:
+            is_senior = True
+
         default_limit = 5 if is_kid else 10
         limit = int(payload.get("limit", default_limit))
         from utils.constants import normalize_subject
         requested_subject = normalize_subject(str(payload.get("subject", "")).strip()) if payload.get("subject") else ""
         requested_diff = str(payload.get("difficulty", "simple" if is_kid else "medium")).lower()
+        requested_topic = str(payload.get("chapterTopic") or payload.get("topic") or "").strip() or None
 
         scheduled_exam = None
         if scheduled_exam_id:
@@ -142,6 +154,7 @@ def generate_quick_test():
                 limit = scheduled_exam.question_count
                 requested_subject = normalize_subject(scheduled_exam.subject)
                 requested_diff = scheduled_exam.difficulty
+                requested_topic = scheduled_exam.chapter_topic or requested_topic
 
         # If not specified, look for active pending scheduled exam for this student
         if not scheduled_exam and not requested_subject:
@@ -158,6 +171,7 @@ def generate_quick_test():
                 limit = scheduled_exam.question_count
                 requested_subject = scheduled_exam.subject
                 requested_diff = scheduled_exam.difficulty
+                requested_topic = scheduled_exam.chapter_topic or requested_topic
 
         sp_rows = []
         # Try fetching questions for specific subject if requested
@@ -177,9 +191,9 @@ def generate_quick_test():
 
         # If sp_rows is empty or doesn't have enough questions for the requested limit,
         # fallback to the smart curriculum/fallback exam generator to guarantee exact count and subject
-        if not sp_rows or len(sp_rows) < limit:
+        if not sp_rows or len(sp_rows) < limit or requested_topic:
             exam_title = scheduled_exam.title if scheduled_exam else None
-            time_limit = scheduled_exam.time_limit_minutes if scheduled_exam else (10 if is_kid else 15)
+            time_limit = scheduled_exam.time_limit_minutes if scheduled_exam else (10 if is_kid else (25 if is_senior else 15))
             exam = exam_generator.generate_exam(
                 session,
                 student_id=student.id,
@@ -192,6 +206,7 @@ def generate_quick_test():
                 time_limit_minutes=time_limit,
                 title=exam_title,
                 is_assigned=bool(scheduled_exam),
+                chapter_topic=requested_topic,
             )
             if scheduled_exam:
                 scheduled_exam.exam_id = exam.id
@@ -229,12 +244,28 @@ def generate_quick_test():
 
         # Slice to exact limit
         sp_rows = list(sp_rows)[:limit]
-        total_exam_marks = len(sp_rows)
+        
+        # Calculate per-question marks & total marks
+        row_marks = []
+        for idx, row in enumerate(sp_rows):
+            if row.get("marks"):
+                row_marks.append(int(row.get("marks")))
+            elif is_kid:
+                row_marks.append(1)
+            elif is_senior:
+                row_marks.append(2)
+            else:
+                row_marks.append(1 if idx < 5 else 2)
+
+        total_exam_marks = sum(row_marks)
         primary_subject = requested_subject or sp_rows[0].get("subject_name") or "General Assessment"
         
         if is_kid:
             title = scheduled_exam.title if scheduled_exam else f"{student.class_grade} {student.target_board} Adventure Challenge ({total_exam_marks} Marks)"
             time_limit = (scheduled_exam.time_limit_minutes if scheduled_exam else 10)
+        elif is_senior:
+            title = scheduled_exam.title if scheduled_exam else f"{student.class_grade} {student.target_board} {primary_subject} ({requested_diff.upper()}) Diagnostic {total_exam_marks}-Mark Exam"
+            time_limit = (scheduled_exam.time_limit_minutes if scheduled_exam else 25)
         else:
             title = scheduled_exam.title if scheduled_exam else f"{student.class_grade} {student.target_board} Quick Diagnostic Assessment ({total_exam_marks} Marks)"
             time_limit = (scheduled_exam.time_limit_minutes if scheduled_exam else 15)
@@ -277,6 +308,8 @@ def generate_quick_test():
                 q_type = "numerical"
             elif "logic" in raw_type:
                 q_type = "logical"
+            elif "saq" in raw_type or "short" in raw_type:
+                q_type = "saq"
             else:
                 q_type = "objective"
 
@@ -298,7 +331,7 @@ def generate_quick_test():
                     correct_answer=str(row.get("correct_answer") or ""),
                     explanation=row.get("explanation") or "Step-by-step diagnostic solution.",
                     difficulty=q_diff,
-                    marks=1,
+                    marks=row_marks[idx],
                     topic=row.get("topic_name") or primary_subject,
                     reference_links=[],
                     hint=f"Focus on {row.get('topic_name') or primary_subject} fundamentals.",

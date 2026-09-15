@@ -33,24 +33,83 @@ def _fetch_questions_from_db(
     class_grade: str,
     subject: str,
     difficulty: str,
+    chapter_topic: str | None = None,
 ) -> list[dict]:
     """Fetches real-time curriculum questions directly via Stored Procedure
-    `sp_generate_exam_from_db` without any inline SQL queries.
+    or topic-specific filtering for adaptive remedial sprints.
     """
     clean_board = (board or "").strip()
     clean_class = (class_grade or "").strip()
     clean_subj = (subject or "").strip()
     clean_diff = (difficulty or "medium").strip()
+    clean_topic = (chapter_topic or "").strip()
 
-    sp_rows = session.execute(
-        text("CALL sp_generate_exam_from_db(:board, :class_grade, :subject, :difficulty)"),
-        {
-            "board": clean_board,
-            "class_grade": clean_class,
-            "subject": clean_subj,
-            "difficulty": clean_diff,
-        },
-    ).mappings().fetchall()
+    sp_rows = []
+
+    # If specific topic requested for remedial sprint, try targeted topic query first
+    if clean_topic:
+        try:
+            topic_rows = session.execute(
+                text("""
+                    SELECT 
+                        q.id AS question_id,
+                        q.question AS question_text,
+                        q.options,
+                        q.correct_answer,
+                        q.explanation,
+                        q.marks,
+                        COALESCE(qt.question_type_name, 'MCQ') AS question_type,
+                        COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
+                        s.subject_name,
+                        ch.chapter_name,
+                        t.topic_name,
+                        b.board_name,
+                        c.class_name
+                    FROM question_master q
+                    JOIN topic_master t ON q.topic_id = t.id
+                    JOIN chapter_master ch ON t.chapter_id = ch.id
+                    JOIN subject_master s ON ch.subject_id = s.id
+                    JOIN board_master b ON s.board_id = b.id
+                    JOIN class_master c ON s.class_id = c.id
+                    JOIN question_type_master qt ON q.question_type_id = qt.id
+                    LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
+                    WHERE q.is_active = 1
+                      AND (
+                          LOWER(t.topic_name) LIKE LOWER(:topic_pattern)
+                          OR LOWER(:clean_topic) LIKE CONCAT('%', LOWER(t.topic_name), '%')
+                          OR LOWER(ch.chapter_name) LIKE LOWER(:topic_pattern)
+                      )
+                    ORDER BY 
+                      CASE 
+                        WHEN LOWER(TRIM(c.class_name)) = LOWER(TRIM(:class_grade)) AND LOWER(TRIM(s.subject_name)) = LOWER(TRIM(:subject)) THEN 1
+                        WHEN LOWER(TRIM(s.subject_name)) = LOWER(TRIM(:subject)) THEN 2
+                        ELSE 3
+                      END,
+                      RAND()
+                    LIMIT 10
+                """),
+                {
+                    "class_grade": clean_class,
+                    "subject": clean_subj,
+                    "clean_topic": clean_topic,
+                    "topic_pattern": f"%{clean_topic}%",
+                }
+            ).mappings().fetchall()
+            if topic_rows:
+                sp_rows = topic_rows
+        except Exception as e:
+            logger.warning(f"Topic query failed, falling back to stored procedure: {e}")
+
+    if not sp_rows:
+        sp_rows = session.execute(
+            text("CALL sp_generate_exam_from_db(:board, :class_grade, :subject, :difficulty)"),
+            {
+                "board": clean_board,
+                "class_grade": clean_class,
+                "subject": clean_subj,
+                "difficulty": clean_diff,
+            },
+        ).mappings().fetchall()
 
     if not sp_rows:
         return []
@@ -123,6 +182,28 @@ def _fetch_questions_from_db(
     return formatted_questions
 
 
+import re
+
+def _get_grade_tier(class_grade: str) -> str:
+    cg = (class_grade or "").lower().strip()
+    if any(k in cg for k in ["neet", "iit", "jee"]):
+        return "senior"
+    match = re.search(r'(?:class|grade)?\s*(\d+)', cg)
+    if match:
+        cnum = int(match.group(1))
+        if 1 <= cnum <= 4:
+            return "kid"
+        if 5 <= cnum <= 10:
+            return "secondary"
+        if cnum >= 11:
+            return "senior"
+    if any(k in cg for k in ["primary", "kindergarten", "ukg", "lkg"]):
+        return "kid"
+    if any(k in cg for k in ["senior", "higher secondary", "isc"]):
+        return "senior"
+    return "secondary"
+
+
 def generate_exam(
     session: Session,
     *,
@@ -136,19 +217,21 @@ def generate_exam(
     time_limit_minutes: int | None = None,
     title: str | None = None,
     is_assigned: bool = False,
+    chapter_topic: str | None = None,
 ) -> Exam:
     weak_topics = get_weak_topics(session, student_id)
     matching_runbooks = rag_engine.retrieve_runbooks(session, board, class_grade, subject)
     rag_context = rag_engine.runbooks_to_context(matching_runbooks, difficulty)
 
     # Determine class-based marks blueprint
+    tier = _get_grade_tier(class_grade)
     cg_lower = (class_grade or "").lower()
-    is_kid = any(c in cg_lower for c in ["class 1", "class 2", "class 3", "class 4"])
-    if is_kid:
+
+    if tier == "kid":
         default_q_count = 5
         default_grade_marks = 5
         default_duration_mins = 10
-    elif any(c in cg_lower for c in ["class 11", "class 12", "neet", "iit"]):
+    elif tier == "senior":
         default_q_count = 10
         default_grade_marks = 20
         default_duration_mins = 25
@@ -173,6 +256,7 @@ def generate_exam(
         class_grade=class_grade,
         subject=subject,
         difficulty=difficulty,
+        chapter_topic=chapter_topic,
     )
     db_count = len(db_questions)
     questions_data = list(db_questions)
@@ -218,15 +302,15 @@ def generate_exam(
         )
         fallback_used = True
         if not questions_data:
-            questions_data = fallback_qs[:target_question_count]
+            questions_data = fallback_qs
         else:
-            # Append missing questions
-            existing_texts = {q.get("questionText") for q in questions_data}
-            for fq in fallback_qs:
-                if len(questions_data) >= target_question_count:
-                    break
-                if fq.get("questionText") not in existing_texts:
-                    questions_data.append(fq)
+            # Supplement remaining needed
+            needed = target_question_count - len(questions_data)
+            questions_data.extend(fallback_qs[:needed])
+
+    # Re-index questionNumber
+    for idx, q in enumerate(questions_data):
+        q["questionNumber"] = idx + 1
 
     # Determine visual source label for terminal tracking
     if db_count >= len(questions_data):
@@ -237,10 +321,6 @@ def generate_exam(
         source_label = "FALLBACK_EXAM_BANK (fallback_exam_bank.py)"
     else:
         source_label = f"HYBRID ({db_count} from Database + {len(questions_data) - db_count} from Fallback)"
-
-    # Re-index questionNumber
-    for idx, q in enumerate(questions_data):
-        q["questionNumber"] = idx + 1
 
     # If parent assigned challenge, enforce 100% MCQ format (1 mark each)
     if is_assigned_challenge:
@@ -263,12 +343,12 @@ def generate_exam(
         # Class 1-4: 5 MCQs (1 Mark each) = 5 Marks Total
         # Class 5-10: 5 MCQs (1 Mark each) + 5 SAQs (2 Marks each) = 15 Marks Total
         # Class 11-12/NEET/IIT: 10 Questions (2 Marks each) = 20 Marks Total
-        if is_kid:
+        if tier == "kid":
             for q in questions_data:
                 q["marks"] = 1
                 q["type"] = "mcq"
-            calculated_marks = len(questions_data)
-        elif any(c in cg_lower for c in ["class 11", "class 12", "neet", "iit"]):
+            calculated_marks = sum(int(q.get("marks", 1)) for q in questions_data)
+        elif tier == "senior":
             for q in questions_data:
                 q["marks"] = 2
             calculated_marks = sum(int(q.get("marks", 2)) for q in questions_data)
@@ -284,7 +364,12 @@ def generate_exam(
                     q["options"] = None
             calculated_marks = sum(int(q.get("marks", 1)) for q in questions_data)
 
-        exam_title = title or f"{class_grade} {board} {subject} ({difficulty.upper()}) Diagnostic {calculated_marks}-Mark Exam"
+        if title:
+            exam_title = title
+        elif chapter_topic:
+            exam_title = f"{class_grade} {board} {subject}: {chapter_topic} Remedial Sprint ({calculated_marks} Marks)"
+        else:
+            exam_title = f"{class_grade} {board} {subject} ({difficulty.upper()}) Diagnostic {calculated_marks}-Mark Exam"
 
     mcq_count = sum(1 for q in questions_data if q.get("type") == "mcq")
     saq_count = sum(1 for q in questions_data if q.get("type") == "saq")

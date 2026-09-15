@@ -1,14 +1,17 @@
 -- ============================================================
--- ACUGRADE AI — MySQL SCHEMA WITH RBAC & STORED PROCEDURES
--- Charset: utf8mb4 (Board/subject text contains non-ASCII symbols)
--- Engine: InnoDB everywhere for FK support
+-- ACUGRADE AI — FULL DATABASE SCHEMA, SEED DATA & PROCEDURES
+-- Charset: utf8mb4 (Supports multilingual symbols & emoji)
+-- Engine: InnoDB
 -- ============================================================
+
+CREATE DATABASE IF NOT EXISTS AcuGrade_AI CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE AcuGrade_AI;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
--- ------------------------------------------------------------
+-- ============================================================
 -- 1. ROLES & DYNAMIC PAGE ACCESS
--- ------------------------------------------------------------
+-- ============================================================
 CREATE TABLE IF NOT EXISTS roles (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   role_name   VARCHAR(50)  NOT NULL UNIQUE, -- 'STUDENT', 'PARENT', 'TEACHER', 'ADMIN'
@@ -31,12 +34,13 @@ CREATE TABLE IF NOT EXISTS role_page_access (
   KEY idx_role_page_active (role_id, is_active)
 ) ENGINE=InnoDB;
 
--- ------------------------------------------------------------
+-- ============================================================
 -- 2. USERS & AUTH
--- ------------------------------------------------------------
+-- ============================================================
 CREATE TABLE IF NOT EXISTS users (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   name          VARCHAR(150) NOT NULL,
+  username      VARCHAR(100) NULL,
   email         VARCHAR(190) NOT NULL,
   password_hash VARCHAR(255) NULL,
   role_id       INT          NOT NULL,
@@ -65,9 +69,9 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   KEY idx_refresh_token_hash (token_hash)
 ) ENGINE=InnoDB;
 
--- ------------------------------------------------------------
+-- ============================================================
 -- 3. PARENT / STUDENT / TEACHER PROFILES
--- ------------------------------------------------------------
+-- ============================================================
 CREATE TABLE IF NOT EXISTS parents (
   id                  INT NOT NULL PRIMARY KEY, -- == users.id
   subscription_tier   ENUM('free','scholar_pro','genius_competitive') NOT NULL DEFAULT 'free',
@@ -86,23 +90,24 @@ CREATE TABLE IF NOT EXISTS teachers (
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS students (
-  id                     INT          NOT NULL PRIMARY KEY, -- == users.id
-  parent_id              INT          NOT NULL,
-  teacher_id             INT          NULL,
-  avatar                 VARCHAR(20)  NOT NULL DEFAULT '🧑‍🎓',
-  class_grade            VARCHAR(20)  NOT NULL,
-  target_board           VARCHAR(20)  NOT NULL,
-  school_name            VARCHAR(190) NULL,
-  pin_hash               VARCHAR(255) NOT NULL,
-  daily_exams_taken_today INT         NOT NULL DEFAULT 0,
-  last_exam_date         DATE         NULL,
-  total_exams_taken      INT          NOT NULL DEFAULT 0,
-  average_score          DECIMAL(5,2) NOT NULL DEFAULT 0.00,
-  streak_days            INT          NOT NULL DEFAULT 0,
-  xp                     INT          NOT NULL DEFAULT 250,
-  level                  INT          NOT NULL DEFAULT 1,
-  created_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  id                      INT          NOT NULL PRIMARY KEY, -- == users.id
+  parent_id               INT          NOT NULL,
+  teacher_id              INT          NULL,
+  avatar                  VARCHAR(20)  NOT NULL DEFAULT '🧑‍🎓',
+  class_grade             VARCHAR(20)  NOT NULL,
+  target_board            VARCHAR(20)  NOT NULL,
+  school_name             VARCHAR(190) NULL,
+  school_email            VARCHAR(190) NULL,
+  pin_hash                VARCHAR(255) NOT NULL,
+  daily_exams_taken_today INT          NOT NULL DEFAULT 0,
+  last_exam_date          DATE         NULL,
+  total_exams_taken       INT          NOT NULL DEFAULT 0,
+  average_score           DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  streak_days             INT          NOT NULL DEFAULT 0,
+  xp                      INT          NOT NULL DEFAULT 250,
+  level                   INT          NOT NULL DEFAULT 1,
+  created_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_students_user    FOREIGN KEY (id)         REFERENCES users(id)    ON DELETE CASCADE,
   CONSTRAINT fk_students_parent  FOREIGN KEY (parent_id)  REFERENCES parents(id)  ON DELETE CASCADE,
   CONSTRAINT fk_students_teacher FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE SET NULL,
@@ -110,26 +115,127 @@ CREATE TABLE IF NOT EXISTS students (
   KEY idx_students_teacher (teacher_id)
 ) ENGINE=InnoDB;
 
--- ------------------------------------------------------------
--- 4. CURRICULUM / RUNBOOKS (K-GRAPH SOURCE NODES)
--- ------------------------------------------------------------
+-- ============================================================
+-- 4. CURRICULUM & QUESTION BANK MASTERS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS board_master (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  board_name  VARCHAR(100) NOT NULL,
+  description TEXT NULL,
+  is_active   TINYINT(1) DEFAULT 1,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS class_master (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  class_name  VARCHAR(100) NOT NULL,
+  is_active   TINYINT(1) DEFAULT 1,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS subject_master (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  board_id     INT NOT NULL,
+  class_id     INT NOT NULL,
+  subject_name VARCHAR(100) NOT NULL,
+  is_active    TINYINT(1) DEFAULT 1,
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_subject_board FOREIGN KEY (board_id) REFERENCES board_master (id) ON DELETE CASCADE,
+  CONSTRAINT fk_subject_class FOREIGN KEY (class_id) REFERENCES class_master (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS chapter_master (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  subject_id   INT NOT NULL,
+  chapter_name VARCHAR(255) NOT NULL,
+  is_active    TINYINT(1) DEFAULT 1,
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_chapter_subject FOREIGN KEY (subject_id) REFERENCES subject_master (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS topic_master (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  chapter_id  INT NOT NULL,
+  topic_name  VARCHAR(255) NOT NULL,
+  is_active   TINYINT(1) DEFAULT 1,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_topic_chapter FOREIGN KEY (chapter_id) REFERENCES chapter_master (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS difficulty_level_master (
+  id                    INT AUTO_INCREMENT PRIMARY KEY,
+  difficulty_level_name VARCHAR(100) NOT NULL,
+  is_active             TINYINT(1) DEFAULT 1,
+  created_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS question_type_master (
+  id                 INT AUTO_INCREMENT PRIMARY KEY,
+  question_type_name VARCHAR(100) NOT NULL,
+  default_marks      INT NOT NULL DEFAULT 1,
+  is_active          TINYINT(1) DEFAULT 1,
+  created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at         DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS question_master (
+  id                  INT AUTO_INCREMENT PRIMARY KEY,
+  topic_id            INT NOT NULL,
+  question_type_id    INT NOT NULL,
+  difficulty_level_id INT NOT NULL,
+  question            TEXT NOT NULL,
+  options             JSON DEFAULT NULL,
+  correct_answer      VARCHAR(500) NOT NULL,
+  explanation         TEXT NULL,
+  marks               INT NOT NULL DEFAULT 1,
+  is_active           TINYINT(1) DEFAULT 1,
+  created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_question_topic FOREIGN KEY (topic_id) REFERENCES topic_master (id) ON DELETE CASCADE,
+  CONSTRAINT fk_question_type FOREIGN KEY (question_type_id) REFERENCES question_type_master (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_question_difficulty FOREIGN KEY (difficulty_level_id) REFERENCES difficulty_level_master (id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS question_upload_batches (
+  id                      INT AUTO_INCREMENT PRIMARY KEY,
+  file_name               VARCHAR(255) NOT NULL,
+  file_size_bytes         INT DEFAULT 0,
+  total_rows              INT DEFAULT 0,
+  inserted_count          INT DEFAULT 0,
+  updated_count           INT DEFAULT 0,
+  duplicate_skipped_count INT DEFAULT 0,
+  status                  VARCHAR(50) DEFAULT 'SUCCESS',
+  uploaded_by             INT NULL,
+  created_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_qub_uploader FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- ============================================================
+-- 5. RUNBOOKS & RAG DOCUMENT STORE
+-- ============================================================
 CREATE TABLE IF NOT EXISTS runbooks (
-  id                      CHAR(36)     NOT NULL PRIMARY KEY,
-  board                   VARCHAR(20)  NOT NULL,
-  class_grade             VARCHAR(20)  NOT NULL,
-  subject                 VARCHAR(40)  NOT NULL,
-  chapter_name            VARCHAR(190) NOT NULL,
-  core_concepts           JSON NOT NULL,
-  key_formulas_or_rules   JSON NOT NULL,
-  common_traps            JSON NOT NULL,
-  curated_reference_urls  JSON NOT NULL,
+  id                         CHAR(36)     NOT NULL PRIMARY KEY,
+  board                      VARCHAR(20)  NOT NULL,
+  class_grade                VARCHAR(20)  NOT NULL,
+  subject                    VARCHAR(40)  NOT NULL,
+  chapter_name               VARCHAR(190) NOT NULL,
+  core_concepts              JSON NOT NULL,
+  key_formulas_or_rules      JSON NOT NULL,
+  common_traps               JSON NOT NULL,
+  curated_reference_urls     JSON NOT NULL,
   sample_question_archetypes JSON NOT NULL,
-  difficulty_calibration  JSON NOT NULL,
-  status                  ENUM('DRAFT','PUBLISHED','ARCHIVED') NOT NULL DEFAULT 'PUBLISHED',
-  version                 INT NOT NULL DEFAULT 1,
-  created_by              INT NULL,
-  created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  difficulty_calibration     JSON NOT NULL,
+  status                     ENUM('DRAFT','PUBLISHED','ARCHIVED') NOT NULL DEFAULT 'PUBLISHED',
+  version                    INT NOT NULL DEFAULT 1,
+  created_by                 INT NULL,
+  created_at                 DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at                 DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_runbooks_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
   KEY idx_runbooks_filter (board, class_grade, subject),
   KEY idx_runbooks_status (status)
@@ -161,24 +267,24 @@ CREATE TABLE IF NOT EXISTS document_chunks (
   KEY idx_chunks_document (document_id)
 ) ENGINE=InnoDB;
 
--- ------------------------------------------------------------
--- 5. EXAMS / QUESTIONS / SUBMISSIONS
--- ------------------------------------------------------------
+-- ============================================================
+-- 6. EXAMS / QUESTIONS / SUBMISSIONS
+-- ============================================================
 CREATE TABLE IF NOT EXISTS exams (
-  id                     CHAR(36)     NOT NULL PRIMARY KEY,
-  student_id             INT          NOT NULL,
-  title                  VARCHAR(255) NOT NULL,
-  board                  VARCHAR(20)  NOT NULL,
-  class_grade            VARCHAR(20)  NOT NULL,
-  subject                VARCHAR(40)  NOT NULL,
-  difficulty             ENUM('simple','medium','hard') NOT NULL,
-  total_marks            INT NOT NULL DEFAULT 10,
-  question_count         INT NOT NULL DEFAULT 10,
-  time_limit_minutes     INT NOT NULL DEFAULT 15,
+  id                       CHAR(36)     NOT NULL PRIMARY KEY,
+  student_id               INT          NOT NULL,
+  title                    VARCHAR(255) NOT NULL,
+  board                    VARCHAR(20)  NOT NULL,
+  class_grade              VARCHAR(20)  NOT NULL,
+  subject                  VARCHAR(40)  NOT NULL,
+  difficulty               ENUM('simple','medium','hard') NOT NULL,
+  total_marks              INT NOT NULL DEFAULT 10,
+  question_count           INT NOT NULL DEFAULT 10,
+  time_limit_minutes       INT NOT NULL DEFAULT 15,
   rag_knowledge_nodes_used JSON NULL,
-  source                 ENUM('mistral-rag','rag-engine-curated') NOT NULL,
-  status                 ENUM('GENERATED','IN_PROGRESS','SUBMITTED','EXPIRED') NOT NULL DEFAULT 'GENERATED',
-  created_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  source                   ENUM('mistral-rag','rag-engine-curated') NOT NULL,
+  status                   ENUM('GENERATED','IN_PROGRESS','SUBMITTED','EXPIRED') NOT NULL DEFAULT 'GENERATED',
+  created_at               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_exams_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
   KEY idx_exams_student (student_id),
   KEY idx_exams_created (created_at)
@@ -188,7 +294,7 @@ CREATE TABLE IF NOT EXISTS questions (
   id               CHAR(36)     NOT NULL PRIMARY KEY,
   exam_id          CHAR(36)     NOT NULL,
   question_number  INT NOT NULL,
-  type             ENUM('mcq','objective','numerical','logical') NOT NULL,
+  type             ENUM('mcq','objective','numerical','logical','saq') NOT NULL,
   question_text    TEXT NOT NULL,
   options          JSON NULL,
   correct_answer   VARCHAR(500) NOT NULL,
@@ -251,18 +357,18 @@ CREATE TABLE IF NOT EXISTS diagnostic_analyses (
   UNIQUE KEY uq_diag_per_submission (submission_id)
 ) ENGINE=InnoDB;
 
--- ------------------------------------------------------------
--- 6. MASTERY / MISCONCEPTIONS / LEARNING PATH
--- ------------------------------------------------------------
+-- ============================================================
+-- 7. MASTERY / MISCONCEPTIONS / LEARNING PATH
+-- ============================================================
 CREATE TABLE IF NOT EXISTS mastery (
-  id             CHAR(36)     NOT NULL PRIMARY KEY,
-  student_id     INT          NOT NULL,
-  topic          VARCHAR(190) NOT NULL,
-  mastery_score  DECIMAL(5,2) NOT NULL DEFAULT 0,
-  confidence     DECIMAL(5,2) NOT NULL DEFAULT 0,
-  attempt_count  INT NOT NULL DEFAULT 0,
-  correct_count  INT NOT NULL DEFAULT 0,
-  status         ENUM('NOT_STARTED','LEARNING','DEVELOPING','MASTERED','CRITICAL_GAP') NOT NULL DEFAULT 'NOT_STARTED',
+  id               CHAR(36)     NOT NULL PRIMARY KEY,
+  student_id       INT          NOT NULL,
+  topic            VARCHAR(190) NOT NULL,
+  mastery_score    DECIMAL(5,2) NOT NULL DEFAULT 0,
+  confidence       DECIMAL(5,2) NOT NULL DEFAULT 0,
+  attempt_count    INT NOT NULL DEFAULT 0,
+  correct_count    INT NOT NULL DEFAULT 0,
+  status           ENUM('NOT_STARTED','LEARNING','DEVELOPING','MASTERED','CRITICAL_GAP') NOT NULL DEFAULT 'NOT_STARTED',
   last_assessed_at DATETIME NULL,
   CONSTRAINT fk_mastery_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
   UNIQUE KEY uq_mastery_student_topic (student_id, topic),
@@ -308,18 +414,18 @@ CREATE TABLE IF NOT EXISTS learning_path_nodes (
   KEY idx_lp_student (student_id)
 ) ENGINE=InnoDB;
 
--- ------------------------------------------------------------
--- 7. GAMIFICATION
--- ------------------------------------------------------------
+-- ============================================================
+-- 8. GAMIFICATION & REWARDS
+-- ============================================================
 CREATE TABLE IF NOT EXISTS badges (
   id               VARCHAR(60)  NOT NULL PRIMARY KEY,
   title            VARCHAR(150) NOT NULL,
   description      VARCHAR(255) NOT NULL,
-  icon             VARCHAR(20)  NOT NULL,
-  tier             ENUM('bronze','silver','gold','diamond') NOT NULL,
-  category         ENUM('mastery','streak','score','speed','explorer') NOT NULL,
+  icon             VARCHAR(20)  NOT NULL DEFAULT '🏆',
+  tier             ENUM('bronze','silver','gold','diamond') NOT NULL DEFAULT 'bronze',
+  category         ENUM('mastery','streak','score','speed','explorer') NOT NULL DEFAULT 'mastery',
   xp_reward        INT NOT NULL DEFAULT 0,
-  requirement_text VARCHAR(255) NOT NULL
+  requirement_text VARCHAR(255) NOT NULL DEFAULT ''
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS student_badges (
@@ -341,9 +447,9 @@ CREATE TABLE IF NOT EXISTS xp_events (
   KEY idx_xp_student (student_id)
 ) ENGINE=InnoDB;
 
--- ------------------------------------------------------------
--- 8. PARENT-TEACHER COMMUNICATION
--- ------------------------------------------------------------
+-- ============================================================
+-- 9. PARENT-TEACHER COMMUNICATION & REPORTS
+-- ============================================================
 CREATE TABLE IF NOT EXISTS conversations (
   id          CHAR(36) NOT NULL PRIMARY KEY,
   parent_id   INT NOT NULL,
@@ -402,9 +508,9 @@ CREATE TABLE IF NOT EXISTS ptm_schedules (
   CONSTRAINT fk_ptm_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- ------------------------------------------------------------
--- 9. SUBSCRIPTIONS & PLANS
--- ------------------------------------------------------------
+-- ============================================================
+-- 10. SUBSCRIPTIONS & PLANS
+-- ============================================================
 CREATE TABLE IF NOT EXISTS subscription_plans (
   id                 VARCHAR(30) NOT NULL PRIMARY KEY,
   name               VARCHAR(150) NOT NULL,
@@ -431,9 +537,9 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   KEY idx_sub_parent (parent_id)
 ) ENGINE=InnoDB;
 
--- ------------------------------------------------------------
--- 10. AUDIT LOG
--- ------------------------------------------------------------
+-- ============================================================
+-- 11. AUDIT LOGS
+-- ============================================================
 CREATE TABLE IF NOT EXISTS audit_logs (
   id          CHAR(36)     NOT NULL PRIMARY KEY,
   user_id     INT          NULL,
@@ -448,7 +554,198 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 ) ENGINE=InnoDB;
 
 -- ============================================================
--- 11. STORED PROCEDURES
+-- 12. BLOGS & CONTENT
+-- ============================================================
+CREATE TABLE IF NOT EXISTS author_master (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  name        VARCHAR(100) NOT NULL,
+  is_active   TINYINT(1) DEFAULT 1,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS category_master (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  name        VARCHAR(100) NOT NULL,
+  is_active   TINYINT(1) DEFAULT 1,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS blogs (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  title            VARCHAR(255) NOT NULL,
+  author_id        INT NOT NULL,
+  category_id      INT NOT NULL,
+  introduction     TEXT NULL,
+  content          TEXT NULL,
+  image_url        VARCHAR(500) NULL,
+  is_pinned        TINYINT(1) NOT NULL DEFAULT 0,
+  tags             JSON NULL,
+  meta_title       VARCHAR(255) NULL,
+  meta_description TEXT NULL,
+  meta_keywords    TEXT NULL,
+  canonical_url    VARCHAR(500) NULL,
+  status           ENUM('Published','Draft') NOT NULL DEFAULT 'Draft',
+  shares_count     INT NOT NULL DEFAULT 0,
+  date             DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_blog_author FOREIGN KEY (author_id) REFERENCES author_master(id),
+  CONSTRAINT fk_blog_category FOREIGN KEY (category_id) REFERENCES category_master(id)
+) ENGINE=InnoDB;
+
+
+-- ============================================================
+-- 13. MASTER SEED DATA (SAFE INSERT-IF-NOT-EXISTS)
+-- ============================================================
+
+-- Roles
+INSERT INTO roles (id, role_name, is_active) VALUES
+(1, 'STUDENT', 1),
+(2, 'PARENT', 1),
+(3, 'TEACHER', 1),
+(4, 'ADMIN', 1)
+ON DUPLICATE KEY UPDATE is_active = 1;
+
+-- Boards
+INSERT INTO board_master (id, board_name, description, is_active) VALUES
+(1, 'CBSE', 'Central Board of Secondary Education', 1),
+(2, 'ICSE', 'Indian Certificate of Secondary Education (Class 1-10)', 1),
+(3, 'WBBSE', 'West Bengal Board of Secondary Education (Class 1-10)', 1),
+(4, 'WBCHSE', 'West Bengal Council of Higher Secondary Education (Class 11-12)', 1),
+(5, 'ISC', 'Indian School Certificate (Class 11-12)', 1),
+(6, 'UK-Cambridge', 'Cambridge Assessment International Education (CAIE / IGCSE)', 1),
+(7, 'NCERT', 'National Council of Educational Research and Training', 1),
+(8, 'NEET', 'National Eligibility cum Entrance Test (Medical UG Foundation)', 1),
+(9, 'IIT', 'Joint Entrance Examination (JEE Main & Advanced Foundation)', 1)
+ON DUPLICATE KEY UPDATE board_name = VALUES(board_name), description = VALUES(description), is_active = 1;
+
+-- Classes
+INSERT INTO class_master (id, class_name, is_active) VALUES
+(1, 'Class 1', 1),
+(2, 'Class 2', 1),
+(3, 'Class 3', 1),
+(4, 'Class 4', 1),
+(5, 'Class 5', 1),
+(6, 'Class 6', 1),
+(7, 'Class 7', 1),
+(8, 'Class 8', 1),
+(9, 'Class 9', 1),
+(10, 'Class 10', 1),
+(11, 'Class 11', 1),
+(12, 'Class 12', 1)
+ON DUPLICATE KEY UPDATE class_name = VALUES(class_name), is_active = 1;
+
+-- Question Types
+INSERT INTO question_type_master (id, question_type_name, default_marks, is_active) VALUES
+(1, 'MCQ', 1, 1),
+(2, 'Objective', 1, 1),
+(3, 'SAQ', 2, 1),
+(4, 'Numerical', 2, 1),
+(5, 'Logical', 2, 1)
+ON DUPLICATE KEY UPDATE question_type_name = VALUES(question_type_name), default_marks = VALUES(default_marks), is_active = 1;
+
+-- Difficulty Levels
+INSERT INTO difficulty_level_master (id, difficulty_level_name, is_active) VALUES
+(1, 'simple', 1),
+(2, 'medium', 1),
+(3, 'hard', 1)
+ON DUPLICATE KEY UPDATE difficulty_level_name = VALUES(difficulty_level_name), is_active = 1;
+
+-- Gamification Badges
+INSERT INTO badges (id, title, description, icon, tier, category, xp_reward, requirement_text) VALUES
+('badge-pioneer', 'Pioneer', 'Took your first diagnostic exam', '🌟', 'bronze', 'explorer', 50, 'Complete 1 diagnostic exam'),
+('badge-perfect-10', 'Perfect 10', 'Scored a flawless 10/10', '🎯', 'gold', 'score', 100, 'Score 100% on any exam'),
+('badge-speed-demon', 'Speed Demon', 'Scored 8+ in under 6 minutes', '⚡', 'silver', 'speed', 75, 'Finish exam with 80%+ under 6 min'),
+('badge-streak-7', '7-Day Streak', 'Maintained a 7-day streak', '🔥', 'diamond', 'streak', 150, 'Practice 7 days in a row')
+ON DUPLICATE KEY UPDATE title = VALUES(title), description = VALUES(description);
+
+-- Subscription Plans
+INSERT INTO subscription_plans (id, name, price_monthly, price_yearly, currency, badge, description, features, daily_exam_limit, max_children, is_popular) VALUES
+('free', 'Explorer Free', 0.00, 0.00, 'INR', 'Free', 'Standard foundational diagnostic tests for single child', '["1 Child Account", "1 Diagnostic Exam / day", "Standard Answer Explanations", "Community Support"]', '1', '1', 0),
+('scholar_pro', 'Scholar Pro', 499.00, 4999.00, 'INR', 'Popular', 'Full adaptive diagnostic engine for up to 3 children', '["Up to 3 Children Accounts", "Unlimited Diagnostic Exams", "Deep Mistral AI Error Diagnostics", "Dynamic Learning Path & Roadmaps", "Teacher Dossier Sharing & PTM Scheduler"]', 'unlimited', '3', 1),
+('genius_competitive', 'Genius Competitive', 999.00, 8999.00, 'INR', 'Ultimate', 'Comprehensive board + competitive (NEET/JEE) preparation for up to 5 children', '["Up to 5 Children Accounts", "Unlimited Diagnostic & Mock Exams", "NEET / JEE Foundation Trackers", "Deep Misconception Root-Cause Mapping", "Priority AI Teacher-Parent Co-Pilot"]', 'unlimited', '5', 0)
+ON DUPLICATE KEY UPDATE name = VALUES(name), price_monthly = VALUES(price_monthly), price_yearly = VALUES(price_yearly);
+
+-- ------------------------------------------------------------
+-- SUBJECTS SEEDING FOR ALL BOARDS & CLASSES
+-- ------------------------------------------------------------
+
+-- A. Primary Classes (Class 1 to 5) for CBSE, ICSE, WBBSE, UK-Cambridge, NCERT
+INSERT INTO subject_master (board_id, class_id, subject_name, is_active)
+SELECT b.id, c.id, s.name, 1
+FROM board_master b
+CROSS JOIN class_master c
+CROSS JOIN (
+    SELECT 'Mathematics' AS name UNION SELECT 'English' UNION SELECT 'Science' 
+    UNION SELECT 'Social Studies' UNION SELECT 'Computer Science' UNION SELECT 'Logical Reasoning'
+) s
+WHERE b.board_name IN ('CBSE', 'ICSE', 'WBBSE', 'UK-Cambridge', 'NCERT')
+  AND c.class_name IN ('Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5')
+  AND NOT EXISTS (
+      SELECT 1 FROM subject_master sm 
+      WHERE sm.board_id = b.id AND sm.class_id = c.id AND sm.subject_name = s.name
+  );
+
+-- B. Middle & Secondary Classes (Class 6 to 10) for CBSE, ICSE, WBBSE, UK-Cambridge, NCERT
+INSERT INTO subject_master (board_id, class_id, subject_name, is_active)
+SELECT b.id, c.id, s.name, 1
+FROM board_master b
+CROSS JOIN class_master c
+CROSS JOIN (
+    SELECT 'Mathematics' AS name UNION SELECT 'Science' UNION SELECT 'Physics' 
+    UNION SELECT 'Chemistry' UNION SELECT 'Biology' UNION SELECT 'Social Studies' 
+    UNION SELECT 'English' UNION SELECT 'Computer Science' UNION SELECT 'Logical Reasoning'
+) s
+WHERE b.board_name IN ('CBSE', 'ICSE', 'WBBSE', 'UK-Cambridge', 'NCERT')
+  AND c.class_name IN ('Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10')
+  AND NOT EXISTS (
+      SELECT 1 FROM subject_master sm 
+      WHERE sm.board_id = b.id AND sm.class_id = c.id AND sm.subject_name = s.name
+  );
+
+-- C. Higher Secondary Classes (Class 11 & 12) for CBSE, ISC, WBCHSE, UK-Cambridge, NCERT, NEET, IIT
+INSERT INTO subject_master (board_id, class_id, subject_name, is_active)
+SELECT b.id, c.id, s.name, 1
+FROM board_master b
+CROSS JOIN class_master c
+CROSS JOIN (
+    SELECT 'Mathematics' AS name UNION SELECT 'Physics' UNION SELECT 'Chemistry' 
+    UNION SELECT 'Biology' UNION SELECT 'Computer Science' UNION SELECT 'English' UNION SELECT 'Logical Reasoning'
+) s
+WHERE b.board_name IN ('CBSE', 'ISC', 'WBCHSE', 'UK-Cambridge', 'NCERT', 'NEET', 'IIT')
+  AND c.class_name IN ('Class 11', 'Class 12')
+  AND NOT EXISTS (
+      SELECT 1 FROM subject_master sm 
+      WHERE sm.board_id = b.id AND sm.class_id = c.id AND sm.subject_name = s.name
+  );
+
+-- ------------------------------------------------------------
+-- DEFAULT CHAPTERS FOR ALL SUBJECTS
+-- ------------------------------------------------------------
+INSERT INTO chapter_master (subject_id, chapter_name, is_active)
+SELECT s.id, CONCAT('General Concepts of ', s.subject_name), 1
+FROM subject_master s
+WHERE s.is_active = 1
+  AND NOT EXISTS (
+      SELECT 1 FROM chapter_master ch WHERE ch.subject_id = s.id
+  );
+
+-- ------------------------------------------------------------
+-- DEFAULT TOPICS FOR ALL CHAPTERS
+-- ------------------------------------------------------------
+INSERT INTO topic_master (chapter_id, topic_name, is_active)
+SELECT ch.id, 'Core Theory & Concepts', 1
+FROM chapter_master ch
+WHERE ch.is_active = 1
+  AND NOT EXISTS (
+      SELECT 1 FROM topic_master t WHERE t.chapter_id = ch.id
+  );
+
+
+-- ============================================================
+-- 14. STORED PROCEDURES
 -- ============================================================
 DROP PROCEDURE IF EXISTS sp_register_parent;
 DROP PROCEDURE IF EXISTS sp_google_login_or_register;
@@ -459,6 +756,11 @@ DROP PROCEDURE IF EXISTS sp_save_refresh_token;
 DROP PROCEDURE IF EXISTS sp_validate_and_rotate_refresh_token;
 DROP PROCEDURE IF EXISTS sp_revoke_refresh_token;
 DROP PROCEDURE IF EXISTS sp_get_role_menu_permissions;
+DROP PROCEDURE IF EXISTS sp_get_registration_roles;
+DROP PROCEDURE IF EXISTS sp_get_child_registration_masters;
+DROP PROCEDURE IF EXISTS sp_add_child_account;
+DROP PROCEDURE IF EXISTS sp_generate_quick_test_from_db;
+DROP PROCEDURE IF EXISTS sp_generate_exam_from_db;
 
 DELIMITER //
 
@@ -553,7 +855,7 @@ BEGIN
     FROM users u
     JOIN roles r ON u.role_id = r.id
     LEFT JOIN parents p ON u.id = p.id
-    WHERE u.email = p_identifier OR u.name = p_identifier
+    WHERE u.email = p_identifier OR u.name = p_identifier OR u.username = p_identifier
     LIMIT 1;
 END //
 
@@ -617,111 +919,45 @@ CREATE PROCEDURE sp_revoke_refresh_token(
     IN p_token_hash VARCHAR(255)
 )
 BEGIN
--- ------------------------------------------------------------
--- 11. CURRICULUM & QUESTION MASTER TABLES
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS board_master (
-  id          INT AUTO_INCREMENT PRIMARY KEY,
-  board_name  VARCHAR(100) NOT NULL,
-  description TEXT NULL,
-  is_active   TINYINT(1) DEFAULT 1,
-  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
+    UPDATE refresh_tokens SET revoked = 1 WHERE token_hash = p_token_hash;
+END //
 
-CREATE TABLE IF NOT EXISTS class_master (
-  id          INT AUTO_INCREMENT PRIMARY KEY,
-  class_name  VARCHAR(100) NOT NULL,
-  is_active   TINYINT(1) DEFAULT 1,
-  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
+CREATE PROCEDURE sp_get_role_menu_permissions(
+    IN p_role_name VARCHAR(50)
+)
+BEGIN
+    SELECT m.id, m.page_name, m.page_route, m.icon, m.menu_order, m.is_active
+    FROM role_page_access m
+    JOIN roles r ON m.role_id = r.id
+    WHERE UPPER(r.role_name) = UPPER(p_role_name) AND m.is_active = 1
+    ORDER BY m.menu_order ASC;
+END //
 
-CREATE TABLE IF NOT EXISTS subject_master (
-  id           INT AUTO_INCREMENT PRIMARY KEY,
-  board_id     INT NOT NULL,
-  class_id     INT NOT NULL,
-  subject_name VARCHAR(100) NOT NULL,
-  is_active    TINYINT(1) DEFAULT 1,
-  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_subject_board FOREIGN KEY (board_id) REFERENCES board_master (id) ON DELETE CASCADE,
-  CONSTRAINT fk_subject_class FOREIGN KEY (class_id) REFERENCES class_master (id) ON DELETE CASCADE
-) ENGINE=InnoDB;
-
-CREATE TABLE IF NOT EXISTS chapter_master (
-  id           INT AUTO_INCREMENT PRIMARY KEY,
-  subject_id   INT NOT NULL,
-  chapter_name VARCHAR(255) NOT NULL,
-  is_active    TINYINT(1) DEFAULT 1,
-  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_chapter_subject FOREIGN KEY (subject_id) REFERENCES subject_master (id) ON DELETE CASCADE
-) ENGINE=InnoDB;
-
-CREATE TABLE IF NOT EXISTS topic_master (
-  id          INT AUTO_INCREMENT PRIMARY KEY,
-  chapter_id  INT NOT NULL,
-  topic_name  VARCHAR(255) NOT NULL,
-  is_active   TINYINT(1) DEFAULT 1,
-  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_topic_chapter FOREIGN KEY (chapter_id) REFERENCES chapter_master (id) ON DELETE CASCADE
-) ENGINE=InnoDB;
-
-CREATE TABLE IF NOT EXISTS difficulty_level_master (
-  id                    INT AUTO_INCREMENT PRIMARY KEY,
-  difficulty_level_name VARCHAR(100) NOT NULL,
-  is_active             TINYINT(1) DEFAULT 1,
-  created_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
-
-CREATE TABLE IF NOT EXISTS question_type_master (
-  id                 INT AUTO_INCREMENT PRIMARY KEY,
-  question_type_name VARCHAR(100) NOT NULL,
-  default_marks      INT NOT NULL DEFAULT 1,
-  is_active          TINYINT(1) DEFAULT 1,
-  created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at         DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
-
-CREATE TABLE IF NOT EXISTS question_master (
-  id                  INT AUTO_INCREMENT PRIMARY KEY,
-  topic_id            INT NOT NULL,
-  question_type_id    INT NOT NULL,
-  difficulty_level_id INT NOT NULL,
-  question            TEXT NOT NULL,
-  options             JSON DEFAULT NULL,
-  correct_answer      VARCHAR(500) NOT NULL,
-  explanation         TEXT NULL,
-  marks               INT NOT NULL DEFAULT 1,
-  is_active           TINYINT(1) DEFAULT 1,
-  created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_question_topic FOREIGN KEY (topic_id) REFERENCES topic_master (id) ON DELETE CASCADE,
-  CONSTRAINT fk_question_type FOREIGN KEY (question_type_id) REFERENCES question_type_master (id) ON DELETE RESTRICT,
-  CONSTRAINT fk_question_difficulty FOREIGN KEY (difficulty_level_id) REFERENCES difficulty_level_master (id) ON DELETE RESTRICT
-) ENGINE=InnoDB;
-
--- ------------------------------------------------------------
--- 12. STORED PROCEDURES
--- ------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_register_parent;
-DROP PROCEDURE IF EXISTS sp_google_login_or_register;
-DROP PROCEDURE IF EXISTS sp_get_user_for_login;
-DROP PROCEDURE IF EXISTS sp_verify_user_session;
-DROP PROCEDURE IF EXISTS sp_get_child_for_login;
-DROP PROCEDURE IF EXISTS sp_save_refresh_token;
-DROP PROCEDURE IF EXISTS sp_validate_and_rotate_refresh_token;
-DROP PROCEDURE IF EXISTS sp_revoke_refresh_token;
-DROP PROCEDURE IF EXISTS sp_get_role_menu_permissions;
-DROP PROCEDURE IF EXISTS sp_get_registration_roles;
-DROP PROCEDURE IF EXISTS sp_get_child_registration_masters;
-DROP PROCEDURE IF EXISTS sp_add_child_account;
-DROP PROCEDURE IF EXISTS sp_generate_quick_test_from_db;
-
-DELIMITER //
+CREATE PROCEDURE sp_get_registration_roles()
+BEGIN
+    SELECT 
+        id,
+        role_name,
+        is_active,
+        CASE 
+            WHEN UPPER(role_name) = 'PARENT' THEN 'Parent (Family & Guardian)'
+            WHEN UPPER(role_name) = 'TEACHER' THEN 'Teacher (School Educator / Tutor)'
+            ELSE role_name
+        END AS display_name,
+        CASE 
+            WHEN UPPER(role_name) = 'PARENT' THEN 'Manage multiple child sub-accounts and monitor academic diagnostics.'
+            WHEN UPPER(role_name) = 'TEACHER' THEN 'Communicate with parents, review student dossiers, and track classes.'
+            ELSE 'User account'
+        END AS description,
+        CASE 
+            WHEN UPPER(role_name) = 'PARENT' THEN '👨‍👩‍👧'
+            WHEN UPPER(role_name) = 'TEACHER' THEN '🧑‍🏫'
+            ELSE '👤'
+        END AS icon
+    FROM roles
+    WHERE UPPER(role_name) IN ('PARENT', 'TEACHER') AND is_active = 1
+    ORDER BY id ASC;
+END //
 
 CREATE PROCEDURE sp_get_child_registration_masters()
 BEGIN
@@ -806,43 +1042,6 @@ BEGIN
     WHERE s.id = v_student_user_id;
 END //
 
-CREATE PROCEDURE sp_get_role_menu_permissions(
-    IN p_role_name VARCHAR(50)
-)
-BEGIN
-    SELECT m.id, m.page_name, m.page_route, m.icon, m.menu_order, m.is_active
-    FROM role_page_access m
-    JOIN roles r ON m.role_id = r.id
-    WHERE UPPER(r.role_name) = UPPER(p_role_name) AND m.is_active = 1
-    ORDER BY m.menu_order ASC;
-END //
-
-CREATE PROCEDURE sp_get_registration_roles()
-BEGIN
-    SELECT 
-        id,
-        role_name,
-        is_active,
-        CASE 
-            WHEN UPPER(role_name) = 'PARENT' THEN 'Parent (Family & Guardian)'
-            WHEN UPPER(role_name) = 'TEACHER' THEN 'Teacher (School Educator / Tutor)'
-            ELSE role_name
-        END AS display_name,
-        CASE 
-            WHEN UPPER(role_name) = 'PARENT' THEN 'Manage multiple child sub-accounts and monitor academic diagnostics.'
-            WHEN UPPER(role_name) = 'TEACHER' THEN 'Communicate with parents, review student dossiers, and track classes.'
-            ELSE 'User account'
-        END AS description,
-        CASE 
-            WHEN UPPER(role_name) = 'PARENT' THEN '👨‍👩‍👧'
-            WHEN UPPER(role_name) = 'TEACHER' THEN '🧑‍🏫'
-            ELSE '👤'
-        END AS icon
-    FROM roles
-    WHERE UPPER(role_name) IN ('PARENT', 'TEACHER') AND is_active = 1
-    ORDER BY id ASC;
-END //
-
 CREATE PROCEDURE sp_generate_quick_test_from_db(
     IN p_student_id INT,
     IN p_limit INT
@@ -852,6 +1051,9 @@ BEGIN
     DECLARE v_class_grade VARCHAR(50);
     DECLARE v_board_id INT;
     DECLARE v_class_id INT;
+    DECLARE v_req_limit INT;
+
+    SET v_req_limit = IFNULL(p_limit, 5);
 
     -- 1. Fetch student info
     SELECT target_board, class_grade INTO v_target_board, v_class_grade
@@ -859,11 +1061,11 @@ BEGIN
     WHERE id = p_student_id;
 
     -- 2. Resolve board_id and class_id
-    SELECT id INTO v_board_id FROM board_master WHERE LOWER(board_name) = LOWER(v_target_board) LIMIT 1;
-    SELECT id INTO v_class_id FROM class_master WHERE LOWER(class_name) = LOWER(v_class_grade) LIMIT 1;
+    SELECT id INTO v_board_id FROM board_master WHERE LOWER(TRIM(board_name)) = LOWER(TRIM(v_target_board)) LIMIT 1;
+    SELECT id INTO v_class_id FROM class_master WHERE LOWER(TRIM(class_name)) = LOWER(TRIM(v_class_grade)) LIMIT 1;
 
-    -- Select 5 one-mark questions (MCQ/Objective) + 5 two-mark questions (SAQ) = 10 questions, 15 marks
-    (
+    -- If student belongs to Kids category (Class 1 to 4)
+    IF LOWER(TRIM(v_class_grade)) IN ('class 1', 'class 2', 'class 3', 'class 4') THEN
         SELECT 
             q.id AS question_id,
             q.question AS question_text,
@@ -871,8 +1073,8 @@ BEGIN
             q.correct_answer,
             q.explanation,
             1 AS marks,
-            COALESCE(qt.question_type_name, 'MCQ') AS question_type,
-            COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
+            'MCQ' AS question_type,
+            COALESCE(dl.difficulty_level_name, 'simple') AS difficulty,
             s.subject_name,
             ch.chapter_name,
             t.topic_name,
@@ -884,29 +1086,135 @@ BEGIN
         JOIN subject_master s ON ch.subject_id = s.id
         JOIN board_master b ON s.board_id = b.id
         JOIN class_master c ON s.class_id = c.id
-        LEFT JOIN question_type_master qt ON q.question_type_id = qt.id
+        JOIN question_type_master qt ON q.question_type_id = qt.id
         LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
         WHERE q.is_active = 1
+          AND qt.question_type_name = 'MCQ'
           AND q.marks = 1
+          AND (s.class_id = v_class_id OR v_class_id IS NULL)
         ORDER BY 
           CASE WHEN s.board_id = v_board_id AND s.class_id = v_class_id THEN 1
                WHEN s.class_id = v_class_id THEN 2
                WHEN s.board_id = v_board_id THEN 3
                ELSE 4 END,
           RAND()
-        LIMIT 5
-    )
-    UNION ALL
-    (
+        LIMIT v_req_limit;
+    ELSE
+        -- Class 5 to 12 (10 Questions, 15 marks total)
+        (
+            SELECT 
+                q.id AS question_id,
+                q.question AS question_text,
+                q.options,
+                q.correct_answer,
+                q.explanation,
+                1 AS marks,
+                COALESCE(qt.question_type_name, 'MCQ') AS question_type,
+                COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
+                s.subject_name,
+                ch.chapter_name,
+                t.topic_name,
+                b.board_name,
+                c.class_name
+            FROM question_master q
+            JOIN topic_master t ON q.topic_id = t.id
+            JOIN chapter_master ch ON t.chapter_id = ch.id
+            JOIN subject_master s ON ch.subject_id = s.id
+            JOIN board_master b ON s.board_id = b.id
+            JOIN class_master c ON s.class_id = c.id
+            LEFT JOIN question_type_master qt ON q.question_type_id = qt.id
+            LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
+            WHERE q.is_active = 1
+              AND q.marks = 1
+            ORDER BY 
+              CASE WHEN s.board_id = v_board_id AND s.class_id = v_class_id THEN 1
+                   WHEN s.class_id = v_class_id THEN 2
+                   WHEN s.board_id = v_board_id THEN 3
+                   ELSE 4 END,
+              RAND()
+            LIMIT 5
+        )
+        UNION ALL
+        (
+            SELECT 
+                q.id AS question_id,
+                q.question AS question_text,
+                q.options,
+                q.correct_answer,
+                q.explanation,
+                2 AS marks,
+                COALESCE(qt.question_type_name, 'SAQ') AS question_type,
+                COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
+                s.subject_name,
+                ch.chapter_name,
+                t.topic_name,
+                b.board_name,
+                c.class_name
+            FROM question_master q
+            JOIN topic_master t ON q.topic_id = t.id
+            JOIN chapter_master ch ON t.chapter_id = ch.id
+            JOIN subject_master s ON ch.subject_id = s.id
+            JOIN board_master b ON s.board_id = b.id
+            JOIN class_master c ON s.class_id = c.id
+            LEFT JOIN question_type_master qt ON q.question_type_id = qt.id
+            LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
+            WHERE q.is_active = 1
+              AND q.marks = 2
+            ORDER BY 
+              CASE WHEN s.board_id = v_board_id AND s.class_id = v_class_id THEN 1
+                   WHEN s.class_id = v_class_id THEN 2
+                   WHEN s.board_id = v_board_id THEN 3
+                   ELSE 4 END,
+              RAND()
+            LIMIT 5
+        )
+        ORDER BY RAND();
+    END IF;
+END //
+
+CREATE PROCEDURE sp_generate_exam_from_db(
+    IN p_board VARCHAR(50),
+    IN p_class_grade VARCHAR(50),
+    IN p_subject VARCHAR(50),
+    IN p_difficulty VARCHAR(50)
+)
+BEGIN
+    DECLARE v_board_id INT;
+    DECLARE v_class_id INT;
+    DECLARE v_is_kids TINYINT(1) DEFAULT 0;
+
+    -- 1. Match board_id
+    SELECT id INTO v_board_id 
+    FROM board_master 
+    WHERE LOWER(TRIM(board_name)) = LOWER(TRIM(p_board))
+       OR (LOWER(TRIM(p_board)) IN ('wbbse', 'wb') AND LOWER(TRIM(board_name)) = 'wbbse')
+       OR (LOWER(TRIM(p_board)) = 'wbchse' AND LOWER(TRIM(board_name)) = 'wbchse')
+    LIMIT 1;
+
+    -- 2. Match class_id
+    SELECT id INTO v_class_id 
+    FROM class_master 
+    WHERE LOWER(TRIM(class_name)) = LOWER(TRIM(p_class_grade))
+       OR LOWER(TRIM(class_name)) = CONCAT('class ', LOWER(TRIM(p_class_grade)))
+       OR LOWER(TRIM(REPLACE(class_name, 'Class ', ''))) = LOWER(TRIM(REPLACE(p_class_grade, 'Class ', '')))
+    LIMIT 1;
+
+    -- Check if kids class (Class 1 to 4)
+    IF LOWER(TRIM(p_class_grade)) IN ('class 1', 'class 2', 'class 3', 'class 4', '1', '2', '3', '4') THEN
+        SET v_is_kids = 1;
+    END IF;
+
+    -- Kids: 5 Questions (All MCQ of 1 Mark = 5 Marks)
+    IF v_is_kids = 1 THEN
         SELECT 
             q.id AS question_id,
             q.question AS question_text,
             q.options,
             q.correct_answer,
             q.explanation,
-            2 AS marks,
-            COALESCE(qt.question_type_name, 'SAQ') AS question_type,
-            COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
+            1 AS marks,
+            'MCQ' AS question_type,
+            COALESCE(dl.difficulty_level_name, 'simple') AS difficulty,
             s.subject_name,
             ch.chapter_name,
             t.topic_name,
@@ -918,19 +1226,96 @@ BEGIN
         JOIN subject_master s ON ch.subject_id = s.id
         JOIN board_master b ON s.board_id = b.id
         JOIN class_master c ON s.class_id = c.id
-        LEFT JOIN question_type_master qt ON q.question_type_id = qt.id
+        JOIN question_type_master qt ON q.question_type_id = qt.id
         LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
         WHERE q.is_active = 1
-          AND q.marks = 2
+          AND qt.question_type_name = 'MCQ'
+          AND q.marks = 1
+          AND (s.class_id = v_class_id OR v_class_id IS NULL)
         ORDER BY 
-          CASE WHEN s.board_id = v_board_id AND s.class_id = v_class_id THEN 1
-               WHEN s.class_id = v_class_id THEN 2
-               WHEN s.board_id = v_board_id THEN 3
-               ELSE 4 END,
+          CASE WHEN s.board_id = v_board_id AND s.class_id = v_class_id AND LOWER(TRIM(s.subject_name)) = LOWER(TRIM(p_subject)) THEN 1
+               WHEN s.class_id = v_class_id AND LOWER(TRIM(s.subject_name)) = LOWER(TRIM(p_subject)) THEN 2
+               WHEN s.class_id = v_class_id THEN 3
+               WHEN s.board_id = v_board_id THEN 4
+               ELSE 5 END,
           RAND()
-        LIMIT 5
-    )
-    ORDER BY RAND();
+        LIMIT 5;
+    ELSE
+        -- Class 5 to 12 (15 Marks: 5 MCQ of 1 Mark + 5 SAQ of 2 Marks)
+        (
+            SELECT 
+                q.id AS question_id,
+                q.question AS question_text,
+                q.options,
+                q.correct_answer,
+                q.explanation,
+                1 AS marks,
+                'MCQ' AS question_type,
+                COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
+                s.subject_name,
+                ch.chapter_name,
+                t.topic_name,
+                b.board_name,
+                c.class_name
+            FROM question_master q
+            JOIN topic_master t ON q.topic_id = t.id
+            JOIN chapter_master ch ON t.chapter_id = ch.id
+            JOIN subject_master s ON ch.subject_id = s.id
+            JOIN board_master b ON s.board_id = b.id
+            JOIN class_master c ON s.class_id = c.id
+            JOIN question_type_master qt ON q.question_type_id = qt.id
+            LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
+            WHERE q.is_active = 1
+              AND qt.question_type_name = 'MCQ'
+              AND q.marks = 1
+              AND (s.class_id = v_class_id OR v_class_id IS NULL)
+            ORDER BY 
+              CASE WHEN s.board_id = v_board_id AND s.class_id = v_class_id AND LOWER(TRIM(s.subject_name)) = LOWER(TRIM(p_subject)) THEN 1
+                   WHEN s.class_id = v_class_id AND LOWER(TRIM(s.subject_name)) = LOWER(TRIM(p_subject)) THEN 2
+                   WHEN s.class_id = v_class_id THEN 3
+                   WHEN s.board_id = v_board_id THEN 4
+                   ELSE 5 END,
+              RAND()
+            LIMIT 5
+        )
+        UNION ALL
+        (
+            SELECT 
+                q.id AS question_id,
+                q.question AS question_text,
+                q.options,
+                q.correct_answer,
+                q.explanation,
+                2 AS marks,
+                'SAQ' AS question_type,
+                COALESCE(dl.difficulty_level_name, 'medium') AS difficulty,
+                s.subject_name,
+                ch.chapter_name,
+                t.topic_name,
+                b.board_name,
+                c.class_name
+            FROM question_master q
+            JOIN topic_master t ON q.topic_id = t.id
+            JOIN chapter_master ch ON t.chapter_id = ch.id
+            JOIN subject_master s ON ch.subject_id = s.id
+            JOIN board_master b ON s.board_id = b.id
+            JOIN class_master c ON s.class_id = c.id
+            JOIN question_type_master qt ON q.question_type_id = qt.id
+            LEFT JOIN difficulty_level_master dl ON q.difficulty_level_id = dl.id
+            WHERE q.is_active = 1
+              AND qt.question_type_name = 'SAQ'
+              AND q.marks = 2
+              AND (s.class_id = v_class_id OR v_class_id IS NULL)
+            ORDER BY 
+              CASE WHEN s.board_id = v_board_id AND s.class_id = v_class_id AND LOWER(TRIM(s.subject_name)) = LOWER(TRIM(p_subject)) THEN 1
+                   WHEN s.class_id = v_class_id AND LOWER(TRIM(s.subject_name)) = LOWER(TRIM(p_subject)) THEN 2
+                   WHEN s.class_id = v_class_id THEN 3
+                   WHEN s.board_id = v_board_id THEN 4
+                   ELSE 5 END,
+              RAND()
+            LIMIT 5
+        );
+    END IF;
 END //
 
 DELIMITER ;

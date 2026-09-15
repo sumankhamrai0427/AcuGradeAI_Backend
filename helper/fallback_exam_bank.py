@@ -978,8 +978,758 @@ SECONDARY_QUESTION_BANKS = {
             "marks": 2,
         },
     ],
+    "science": [
+        # 1-5: MCQs (1 Mark each)
+        {
+            "type": "mcq",
+            "questionText": "Which organelle is considered the powerhouse of eukaryotic cells?",
+            "options": ["A) Mitochondria", "B) Ribosome", "C) Golgi apparatus", "D) Endoplasmic reticulum"],
+            "correctAnswer": "A",
+            "explanation": "Mitochondria generate most of the cell's supply of ATP through cellular respiration.",
+            "topic": "Cell Structure",
+            "marks": 1,
+        },
+        {
+            "type": "mcq",
+            "questionText": "What is the SI unit of Electric Current?",
+            "options": ["A) Ampere (A)", "B) Volt (V)", "C) Ohm (Ω)", "D) Coulomb (C)"],
+            "correctAnswer": "A",
+            "explanation": "The SI base unit of electric current is the Ampere (A).",
+            "topic": "Electricity & Magnetism",
+            "marks": 1,
+        },
+        {
+            "type": "mcq",
+            "questionText": "What type of chemical reaction occurs when Calcium Carbonate decomposes into CaO and CO₂ upon heating?",
+            "options": ["A) Thermal Decomposition", "B) Combination Reaction", "C) Displacement Reaction", "D) Neutralization"],
+            "correctAnswer": "A",
+            "explanation": "CaCO₃(s) -> CaO(s) + CO₂(g) is a thermal decomposition reaction driven by heat.",
+            "topic": "Chemical Reactions",
+            "marks": 1,
+        },
+        {
+            "type": "mcq",
+            "questionText": "Which part of the human brain controls involuntary actions like heartbeat and breathing?",
+            "options": ["A) Medulla Oblongata", "B) Cerebrum", "C) Cerebellum", "D) Hypothalamus"],
+            "correctAnswer": "A",
+            "explanation": "The medulla oblongata in the brainstem regulates vital autonomous functions like heartbeat and breathing.",
+            "topic": "Control & Coordination",
+            "marks": 1,
+        },
+        {
+            "type": "mcq",
+            "questionText": "An object placed at 2F in front of a convex lens produces an image that is:",
+            "options": ["A) Real, inverted, and same size at 2F", "B) Virtual and magnified", "C) Real and diminished at F", "D) Highly magnified at infinity"],
+            "correctAnswer": "A",
+            "explanation": "When placed at 2F of a convex lens, a real, inverted image of identical size forms at 2F on the other side.",
+            "topic": "Light & Optics",
+            "marks": 1,
+        },
+        # 6-10: SAQs (2 Marks each)
+        {
+            "type": "saq",
+            "questionText": "State Ohm's Law and write the mathematical relationship between Voltage (V), Current (I), and Resistance (R).",
+            "options": None,
+            "correctAnswer": "Ohm's Law: Current flowing through a conductor is directly proportional to the potential difference across its ends at constant temperature. V = I × R.",
+            "explanation": "V = IR, where V is potential difference in Volts, I is current in Amperes, and R is resistance in Ohms.",
+            "topic": "Electricity",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Differentiate between Exothermic and Endothermic chemical reactions with one chemical equation for each.",
+            "options": None,
+            "correctAnswer": "Exothermic releases heat (e.g., C + O₂ -> CO₂ + Heat). Endothermic absorbs heat (e.g., CaCO₃ + Heat -> CaO + CO₂).",
+            "explanation": "Exothermic reactions release thermal energy (ΔH < 0), while endothermic reactions absorb heat from surroundings (ΔH > 0).",
+            "topic": "Chemical Reactions",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Explain the role of Bile Juice in human digestion and state where it is produced and stored.",
+            "options": None,
+            "correctAnswer": "Bile juice emulsifies large fat globules into smaller droplets and makes the medium alkaline for pancreatic enzymes. Produced by Liver, stored in Gallbladder.",
+            "explanation": "Bile salts lower surface tension to emulsify lipids for lipase action. Synthesized in liver hepatocytes.",
+            "topic": "Life Processes",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "State Snell's Law of refraction and write the mathematical formula for refractive index.",
+            "options": None,
+            "correctAnswer": "Snell's Law: The ratio of sine of angle of incidence to sine of angle of refraction is constant for a given pair of media. sin(i) / sin(r) = n₂ / n₁.",
+            "explanation": "Refractive index n = c/v = sin(i)/sin(r).",
+            "topic": "Light Refraction",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "What is the function of the Ozone layer in Earth's stratosphere, and which chemical compounds cause its depletion?",
+            "options": None,
+            "correctAnswer": "The ozone layer (O₃) shields life by absorbing harmful UV-B radiation from the sun. Depleted primarily by Chlorofluorocarbons (CFCs).",
+            "explanation": "Chlorofluorocarbons release chlorine radicals upon UV exposure which catalyze the breakdown of O₃ molecules into O₂.",
+            "topic": "Our Environment",
+            "marks": 2,
+        },
+    ],
 }
 
+# Senior Secondary & Competitive Exam Bank (Class 11, Class 12, ISC, CBSE, NEET, JEE)
+# 10 Questions @ 2 Marks = 20 Marks Total
+SENIOR_SECONDARY_BANKS = {
+    "chemistry": [
+        # 1-5: MCQs (2 Marks each)
+        {
+            "type": "mcq",
+            "questionText": "For a zero-order reaction A -> Products, what is the integrated rate equation and the half-life period (t₁/₂)?",
+            "options": [
+                "A) [A] = [A]₀ - kt and t₁/₂ = [A]₀ / (2k)",
+                "B) ln[A] = ln[A]₀ - kt and t₁/₂ = 0.693 / k",
+                "C) 1/[A] - 1/[A]₀ = kt and t₁/₂ = 1 / (k[A]₀)",
+                "D) [A] = [A]₀ e^(-kt) and t₁/₂ = 2[A]₀ / k"
+            ],
+            "correctAnswer": "A",
+            "explanation": "For zero-order kinetics: rate = -d[A]/dt = k ⟹ [A] = [A]₀ - kt. When [A] = [A]₀/2, t₁/₂ = [A]₀/(2k).",
+            "topic": "Chemical Kinetics",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "Which coordination complex exhibits optical isomerism (chirality)?",
+            "options": [
+                "A) [Co(en)₃]³⁺",
+                "B) trans-[Pt(NH₃)₂Cl₂]",
+                "C) [Co(NH₃)₆]³⁺",
+                "D) [Ni(CN)₄]²⁻"
+            ],
+            "correctAnswer": "A",
+            "explanation": "Tris-(ethylenediamine)cobalt(III) [Co(en)₃]³⁺ lacks a plane of symmetry (D3 point group) and exists as non-superimposable d- and l- enantiomers.",
+            "topic": "Coordination Compounds",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "In the SN2 nucleophilic substitution mechanism, the stereochemical outcome is characterized by:",
+            "options": [
+                "A) Complete Walden inversion of configuration",
+                "B) Racemization with slight inversion",
+                "C) 100% Retention of configuration",
+                "D) Carbocation rearrangement"
+            ],
+            "correctAnswer": "A",
+            "explanation": "SN2 reactions occur via a concerted backside nucleophilic attack, producing complete stereochemical inversion (Walden inversion).",
+            "topic": "Organic Reaction Mechanisms",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "According to the Nernst Equation, what is the cell potential E_cell at 298 K for the Daniell Cell Zn | Zn²⁺(0.1 M) || Cu²⁺(1.0 M) | Cu (E°_cell = 1.10 V)?",
+            "options": [
+                "A) 1.130 V",
+                "B) 1.070 V",
+                "C) 1.100 V",
+                "D) 0.980 V"
+            ],
+            "correctAnswer": "A",
+            "explanation": "E_cell = E° - (0.0591/2) * log([Zn²⁺]/[Cu²⁺]) = 1.10 - 0.02955 * log(0.1/1.0) = 1.10 - 0.02955 * (-1) = 1.10 + 0.02955 ≈ 1.13 V.",
+            "topic": "Electrochemistry",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "Which colligative property measurement is most suitable for determining the molar mass of biomolecules and polymers?",
+            "options": [
+                "A) Osmotic Pressure",
+                "B) Elevation in Boiling Point",
+                "C) Depression in Freezing Point",
+                "D) Relative Lowering of Vapor Pressure"
+            ],
+            "correctAnswer": "A",
+            "explanation": "Osmotic pressure can be measured accurately at room temperature with high sensitivity for dilute solutions of high-molar-mass polymers.",
+            "topic": "Solutions & Colligative Properties",
+            "marks": 2,
+        },
+        # 6-10: SAQs (2 Marks each)
+        {
+            "type": "saq",
+            "questionText": "State Raoult's Law for a binary solution containing two volatile liquid components A and B, and write the mathematical expression for total vapor pressure.",
+            "options": None,
+            "correctAnswer": "Raoult's Law: The partial vapor pressure of each volatile component in a solution is directly proportional to its mole fraction: P_total = P_A°·x_A + P_B°·x_B.",
+            "explanation": "P_total = P_A + P_B = P_A°·x_A + P_B°·(1 - x_A) for an ideal solution where intermolecular forces between unlike molecules equal those between like molecules.",
+            "topic": "Solutions",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Explain Cannizzaro Reaction with a balanced chemical equation using Benzaldehyde (C₆H₅CHO).",
+            "options": None,
+            "correctAnswer": "Aldehydes lacking α-hydrogen atoms undergo self-redox (disproportionation) in concentrated alkali: 2 C₆H₅CHO + NaOH -> C₆H₅COONa + C₆H₅CH₂OH (Sodium Benzoate + Benzyl Alcohol).",
+            "explanation": "One molecule of benzaldehyde is reduced to benzyl alcohol while the second molecule is oxidized to sodium benzoate in 50% NaOH.",
+            "topic": "Aldehydes, Ketones & Carboxylic Acids",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "State Kohlrausch's Law of Independent Migration of Ions and write its expression for the limiting molar conductivity of MgCl₂ (Λ°_m(MgCl₂)).",
+            "options": None,
+            "correctAnswer": "Kohlrausch's Law states limiting molar conductivity of an electrolyte equals the sum of individual limiting molar conductivities of its cations and anions. Λ°_m(MgCl₂) = λ°(Mg²⁺) + 2·λ°(Cl⁻).",
+            "explanation": "At infinite dilution, each ion migrates independently unaffected by the co-ion.",
+            "topic": "Electrochemistry",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Using Crystal Field Theory (CFT), explain why [Fe(CN)₆]³⁻ is low spin (inner orbital) while [FeF₆]³⁻ is high spin (outer orbital).",
+            "options": None,
+            "correctAnswer": "CN⁻ is a strong field ligand causing large crystal field splitting (Δo > P), forcing d-electrons to pair up (t2g⁵ eg⁰, low spin, 1 unpaired electron). F⁻ is a weak field ligand (Δo < P) yielding high spin (t2g³ eg², 5 unpaired electrons).",
+            "explanation": "Strong field ligands exceed electron pairing energy P, resulting in lower total spin configuration.",
+            "topic": "Coordination Compounds",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Define the Arrhenius activation energy (Ea) and write the logarithmic form of the Arrhenius equation comparing rate constants k₁ and k₂ at temperatures T₁ and T₂.",
+            "options": None,
+            "correctAnswer": "Activation Energy (Ea) is the minimum energy required by reacting molecules to form the activated complex. ln(k₂/k₁) = (Ea/R) × [(T₂ - T₁)/(T₁·T₂)].",
+            "explanation": "Arrhenius equation k = A·e^(-Ea/RT). Logarithmic form: log(k₂/k₁) = (Ea / 2.303R) * (1/T₁ - 1/T₂).",
+            "topic": "Chemical Kinetics",
+            "marks": 2,
+        },
+    ],
+    "physics": [
+        # 1-5: MCQs (2 Marks each)
+        {
+            "type": "mcq",
+            "questionText": "What is the magnetic force on a charge q moving with velocity v in a uniform magnetic field B?",
+            "options": [
+                "A) F = q(v × B)",
+                "B) F = q(v · B)",
+                "C) F = (v × B) / q",
+                "D) F = q²(v × B)"
+            ],
+            "correctAnswer": "A",
+            "explanation": "The Lorentz magnetic force vector is F = q(v × B) with magnitude F = qvB sin(θ).",
+            "topic": "Magnetic Effects of Current",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "In Young's Double Slit Experiment (YDSE), if the screen distance D is doubled and slit separation d is halved, the fringe width β becomes:",
+            "options": [
+                "A) 4 times original",
+                "B) 2 times original",
+                "C) Halved",
+                "D) Unchanged"
+            ],
+            "correctAnswer": "A",
+            "explanation": "Fringe width β = λD / d. If D' = 2D and d' = d/2, then β' = λ(2D)/(d/2) = 4(λD/d) = 4β.",
+            "topic": "Wave Optics",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "According to Einstein's Photoelectric Equation, the maximum kinetic energy (K_max) of emitted photoelectrons equals:",
+            "options": [
+                "A) hν - Φ₀ (where Φ₀ is work function)",
+                "B) hν + Φ₀",
+                "C) Φ₀ / hν",
+                "D) 0.5 hν"
+            ],
+            "correctAnswer": "A",
+            "explanation": "Einstein's photoelectric law: K_max = hν - Φ₀ = h(ν - ν₀), where hν is incident photon energy and Φ₀ is work function.",
+            "topic": "Dual Nature of Radiation",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "An alternating current circuit contains an inductor L and capacitor C in series. The resonant angular frequency ω₀ is given by:",
+            "options": [
+                "A) 1 / √(LC)",
+                "B) √(LC)",
+                "C) L / C",
+                "D) 1 / (2πLC)"
+            ],
+            "correctAnswer": "A",
+            "explanation": "At resonance, inductive reactance equals capacitive reactance: ωL = 1/(ωC) ⟹ ω₀ = 1 / √(LC).",
+            "topic": "Alternating Current",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "What is the de Broglie wavelength λ of an electron accelerated through a potential difference of V volts?",
+            "options": [
+                "A) λ = 1.227 / √V nm",
+                "B) λ = 12.27 / V nm",
+                "C) λ = √V / 1.227 nm",
+                "D) λ = 0.1227 / √V nm"
+            ],
+            "correctAnswer": "A",
+            "explanation": "λ = h / p = h / √(2m_e eV) = 1.227 / √V nanometers.",
+            "topic": "Quantum & Modern Physics",
+            "marks": 2,
+        },
+        # 6-10: SAQs (2 Marks each)
+        {
+            "type": "saq",
+            "questionText": "State Gauss's Law in Electrostatics and express it in integral vector notation for a closed Gaussian surface enclosing charge Q_enc.",
+            "options": None,
+            "correctAnswer": "Gauss's Law states that total electric flux through any closed surface equals (1/ε₀) times the net enclosed charge: ∮ E · dA = Q_enc / ε₀.",
+            "explanation": "∮ E · dA = Q_enc / ε₀ where E is electric field vector, dA is area element vector, and ε₀ is permittivity of free space.",
+            "topic": "Electrostatics",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "State Faraday's Law of Electromagnetic Induction and Lenz's Law, giving the mathematical formula for induced EMF.",
+            "options": None,
+            "correctAnswer": "Faraday's Law: Induced EMF is proportional to time rate of change of magnetic flux. Lenz's Law: Direction of induced current opposes the flux change causing it. ε = - dΦ_B / dt.",
+            "explanation": "ε = -N (dΦ_B / dt), where negative sign embodies Lenz's law (conservation of energy).",
+            "topic": "Electromagnetic Induction",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Derive the expression for the equivalent capacitance (C_eq) of two capacitors C₁ and C₂ connected in series.",
+            "options": None,
+            "correctAnswer": "In series, charge Q is identical across both capacitors: V = V₁ + V₂ = Q/C₁ + Q/C₂ = Q(1/C₁ + 1/C₂). Therefore 1/C_eq = 1/C₁ + 1/C₂ ⟹ C_eq = (C₁·C₂)/(C₁ + C₂).",
+            "explanation": "Reciprocal of equivalent series capacitance is the sum of reciprocals of individual capacitances.",
+            "topic": "Capacitance",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "State Biot-Savart Law and write the vector equation for magnetic field dB produced by a current element I·dl at displacement r.",
+            "options": None,
+            "correctAnswer": "Biot-Savart Law gives magnetic field produced by current element: dB = (μ₀ / 4π) · (I dl × r̂) / r² = (μ₀ / 4π) · (I dl × r) / r³.",
+            "explanation": "μ₀ is permeability of free space (4π × 10⁻⁷ T·m/A). Magnitude dB = (μ₀/4π) * (I dl sin θ / r²).",
+            "topic": "Magnetism & Current",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Explain the principle of Total Internal Reflection (TIR) and define critical angle (θ_c) with formula in terms of refractive indices n₁ and n₂ (n₁ > n₂).",
+            "options": None,
+            "correctAnswer": "TIR occurs when light traveling from a denser medium (n₁) to rarer medium (n₂) strikes the interface at angle greater than critical angle θ_c: sin(θ_c) = n₂ / n₁.",
+            "explanation": "At critical angle θ_c, angle of refraction is 90°. When i > θ_c, 100% of light reflects back into the denser medium.",
+            "topic": "Ray Optics",
+            "marks": 2,
+        },
+    ],
+    "biology": [
+        # 1-5: MCQs (2 Marks each)
+        {
+            "type": "mcq",
+            "questionText": "In DNA replication, which enzyme synthesizes RNA primers required for DNA Polymerase III to initiate elongation?",
+            "options": ["A) RNA Primase", "B) DNA Helicase", "C) DNA Ligase", "D) Topoisomerase"],
+            "correctAnswer": "A",
+            "explanation": "RNA Primase synthesizes short complementary RNA primers providing the free 3'-OH group needed by DNA polymerase.",
+            "topic": "Molecular Genetics",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "In Polymerase Chain Reaction (PCR), what is the correct sequence of thermal cycling steps?",
+            "options": [
+                "A) Denaturation (~94°C) -> Annealing (~55°C) -> Extension (~72°C)",
+                "B) Annealing -> Denaturation -> Extension",
+                "C) Extension -> Denaturation -> Annealing",
+                "D) Denaturation -> Extension -> Annealing"
+            ],
+            "correctAnswer": "A",
+            "explanation": "PCR cycles through: (1) Denaturation to separate DNA strands at 94-96°C, (2) Primer annealing at 50-60°C, (3) Taq polymerase extension at 72°C.",
+            "topic": "Biotechnology",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "Which hormone surge triggers ovulation and the release of the secondary oocyte from the Graafian follicle?",
+            "options": ["A) Luteinizing Hormone (LH surge)", "B) Progesterone", "C) Estrogen", "D) Prolactin"],
+            "correctAnswer": "A",
+            "explanation": "A sharp mid-cycle LH surge (around Day 14) induces rupture of the mature Graafian follicle and ovulation.",
+            "topic": "Human Reproduction",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "In a dihybrid cross following Mendel's Law of Independent Assortment, what is the classic phenotypic ratio in the F2 generation?",
+            "options": ["A) 9:3:3:1", "B) 1:2:1", "C) 3:1", "D) 9:7"],
+            "correctAnswer": "A",
+            "explanation": "Mendelian dihybrid phenotypic ratio in F2 generation of heterozygous parents (AaBb x AaBb) is 9:3:3:1.",
+            "topic": "Principles of Inheritance",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "Which immunoglobulins (antibodies) are found predominantly in maternal colostrum, providing passive immunity to the newborn?",
+            "options": ["A) Secretory IgA", "B) IgM", "C) IgE", "D) IgD"],
+            "correctAnswer": "A",
+            "explanation": "IgA antibodies in colostrum coat mucosal linings of the infant gastrointestinal tract to shield against pathogens.",
+            "topic": "Human Health & Immunology",
+            "marks": 2,
+        },
+        # 6-10: SAQs (2 Marks each)
+        {
+            "type": "saq",
+            "questionText": "Explain the Central Dogma of Molecular Biology proposed by Francis Crick and state the process that violates it in retroviruses.",
+            "options": None,
+            "correctAnswer": "Central Dogma: DNA -> (Transcription) -> mRNA -> (Translation) -> Protein. Retroviruses violate this via Reverse Transcription (RNA -> complementary DNA catalyzed by Reverse Transcriptase).",
+            "explanation": "Information flows unidirectionally from nucleic acids to functional proteins; retroviruses (e.g. HIV) transcribe RNA into cDNA.",
+            "topic": "Molecular Biology",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Define Restriction Endonucleases and explain why they are called 'Molecular Scissors' in recombinant DNA technology.",
+            "options": None,
+            "correctAnswer": "Restriction Endonucleases are bacterial enzymes that recognize specific palindromic DNA sequences and cleave phosphodiester bonds, generating sticky or blunt ends for gene splicing.",
+            "explanation": "Discovered in bacteria as defense against bacteriophages; widely used to cut plasmid vectors and donor genes at targeted loci.",
+            "topic": "Biotechnology Principles",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Differentiate between Homologous and Analogous organs with one evolutionary example of each.",
+            "options": None,
+            "correctAnswer": "Homologous organs share common anatomical origin but perform different functions (Divergent evolution, e.g., human arm and bat wing). Analogous organs share similar function with different anatomical origins (Convergent evolution, e.g., bird wing and butterfly wing).",
+            "explanation": "Homology indicates common phylogenetic ancestry; analogy results from similar ecological selection pressures.",
+            "topic": "Evolution",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Explain the 10% Law of Energy Transfer in trophic ecological food chains proposed by Raymond Lindeman.",
+            "options": None,
+            "correctAnswer": "Lindeman's 10% Law: During energy transfer across trophic levels, only ~10% of total energy is stored as biomass at the next level; ~90% is lost as metabolic heat and respiration.",
+            "explanation": "Limits the practical length of food chains in ecosystems typically to 4-5 trophic levels.",
+            "topic": "Ecosystem & Ecology",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "State the difference between In-situ and Ex-situ biodiversity conservation with two examples of each.",
+            "options": None,
+            "correctAnswer": "In-situ: Conserving species within natural ecosystems (e.g., National Parks, Biosphere Reserves). Ex-situ: Conserving endangered species outside natural habitats in protected environments (e.g., Botanical Gardens, Cryogenic Gene/Seed Banks, Zoological Parks).",
+            "explanation": "In-situ maintains natural ecological and evolutionary dynamics; Ex-situ provides intensive human intervention for critically endangered taxa.",
+            "topic": "Biodiversity Conservation",
+            "marks": 2,
+        },
+    ],
+    "mathematics": [
+        # 1-5: MCQs (2 Marks each)
+        {
+            "type": "mcq",
+            "questionText": "Evaluate the definite integral: ∫ from 0 to π/2 of (sin x / (sin x + cos x)) dx:",
+            "options": ["A) π / 4", "B) π / 2", "C) 1", "D) 0"],
+            "correctAnswer": "A",
+            "explanation": "Using property ∫₀ᵃ f(x) dx = ∫₀ᵃ f(a-x) dx: 2I = ∫₀^(π/2) 1 dx = π/2 ⟹ I = π/4.",
+            "topic": "Definite Integrals",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "What is the order and degree of the differential equation: [1 + (dy/dx)²]^(3/2) = k · (d²y/dx²)?",
+            "options": [
+                "A) Order = 2, Degree = 2",
+                "B) Order = 2, Degree = 1",
+                "C) Order = 1, Degree = 3",
+                "D) Order = 2, Degree = 3"
+            ],
+            "correctAnswer": "A",
+            "explanation": "Squaring both sides eliminates fractional powers: [1 + (dy/dx)²]³ = k² (d²y/dx²)². Highest derivative is 2nd order with degree 2.",
+            "topic": "Differential Equations",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "If A is a square matrix of order 3 and |A| = 4, what is the value of the determinant |adj(A)|?",
+            "options": ["A) 16", "B) 64", "C) 4", "D) 12"],
+            "correctAnswer": "A",
+            "explanation": "Formula: |adj(A)| = |A|^(n - 1). For order n = 3: |adj(A)| = 4^(3 - 1) = 4² = 16.",
+            "topic": "Matrices & Determinants",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "Find the angle θ between two vectors a = 2î + ĵ + 2k̂ and b = 3î + 2ĵ + 6k̂:",
+            "options": [
+                "A) cos⁻¹(20 / 21)",
+                "B) cos⁻¹(14 / 21)",
+                "C) cos⁻¹(18 / 21)",
+                "D) π / 3"
+            ],
+            "correctAnswer": "A",
+            "explanation": "a · b = (2)(3) + (1)(2) + (2)(6) = 6 + 2 + 12 = 20. |a| = √(4+1+4) = 3; |b| = √(9+4+36) = 7. cos θ = 20 / 21.",
+            "topic": "Vector Algebra",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "In a binomial distribution B(n, p), the mean is 4 and variance is 3. What is the value of n?",
+            "options": ["A) 16", "B) 12", "C) 8", "D) 20"],
+            "correctAnswer": "A",
+            "explanation": "Mean np = 4, Variance npq = 3 ⟹ q = 3/4 ⟹ p = 1/4. n(1/4) = 4 ⟹ n = 16.",
+            "topic": "Probability Distributions",
+            "marks": 2,
+        },
+        # 6-10: SAQs (2 Marks each)
+        {
+            "type": "saq",
+            "questionText": "Evaluate the indefinite integral: ∫ (2x + 3) / (x² + 3x + 5) dx. Show step-by-step substitution.",
+            "options": None,
+            "correctAnswer": "Let u = x² + 3x + 5 ⟹ du = (2x + 3) dx. ∫ du / u = ln|u| + C = ln|x² + 3x + 5| + C.",
+            "explanation": "The numerator is the exact derivative of the quadratic denominator, yielding direct logarithmic integration.",
+            "topic": "Indefinite Integrals",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Find the general solution of the first-order linear differential equation: dy/dx + y·cot(x) = 2 cos(x).",
+            "options": None,
+            "correctAnswer": "Integrating Factor I.F. = e^(∫ cot x dx) = e^(ln sin x) = sin(x). Solution: y · sin(x) = ∫ 2 cos(x)·sin(x) dx = ∫ sin(2x) dx = -0.5 cos(2x) + C ⟹ y = -cos(2x)/(2 sin x) + C/sin x.",
+            "explanation": "Standard linear form dy/dx + P(x)y = Q(x). Multiply by I.F. and integrate right-hand side.",
+            "topic": "Differential Equations",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Find the shortest distance between the parallel planes: 2x + 3y + 4z = 4 and 4x + 6y + 8z = 12.",
+            "options": None,
+            "correctAnswer": "Dividing second plane by 2: 2x + 3y + 4z = 6. Distance d = |d₂ - d₁| / √(a² + b² + c²) = |6 - 4| / √(4 + 9 + 16) = 2 / √29.",
+            "explanation": "Parallel plane distance formula d = |D₁ - D₂| / √(A² + B² + C²).",
+            "topic": "3D Geometry",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Find the local maxima and minima for the function f(x) = 2x³ - 9x² + 12x + 5 using the second derivative test.",
+            "options": None,
+            "correctAnswer": "f'(x) = 6x² - 18x + 12 = 6(x-1)(x-2) = 0 ⟹ critical points x = 1, 2. f''(x) = 12x - 18. At x = 1: f''(1) = -6 < 0 (Local Maxima at (1, 10)). At x = 2: f''(2) = +6 > 0 (Local Minima at (2, 9)).",
+            "explanation": "First derivative gives stationary points; sign of second derivative distinguishes concave down (maximum) from concave up (minimum).",
+            "topic": "Application of Derivatives",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "State Bayes' Theorem formula for calculating conditional probability P(A_i | B) for mutually exclusive events A_1, A_2 ... A_n.",
+            "options": None,
+            "correctAnswer": "Bayes' Theorem: P(A_i | B) = [P(A_i) · P(B | A_i)] / [∑ (P(A_k) · P(B | A_k)) for k = 1 to n].",
+            "explanation": "Allows updating prior probabilities P(A_i) to posterior probabilities given observed event B.",
+            "topic": "Bayes Theorem",
+            "marks": 2,
+        },
+    ],
+    "computer science": [
+        # 1-5: MCQs (2 Marks each)
+        {
+            "type": "mcq",
+            "questionText": "In Python Object-Oriented Programming, what is the role of the '__init__' method?",
+            "options": [
+                "A) Constructor method to initialize newly created object attributes",
+                "B) Destructor method to deallocate memory",
+                "C) Class decorator method",
+                "D) Static method executor"
+            ],
+            "correctAnswer": "A",
+            "explanation": "__init__ is the initializer method automatically invoked when a class instantiation occurs.",
+            "topic": "OOP in Python",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "Which normal form in relational database design addresses and eliminates Transitive Functional Dependencies?",
+            "options": ["A) Third Normal Form (3NF)", "B) First Normal Form (1NF)", "C) Second Normal Form (2NF)", "D) BCNF"],
+            "correctAnswer": "A",
+            "explanation": "3NF requires a relation to be in 2NF and have no non-prime attribute transitively dependent on the candidate key.",
+            "topic": "Relational Databases",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "What is the worst-case time complexity of QuickSort when a poorly chosen pivot (e.g. smallest element each time) is used on sorted data?",
+            "options": ["A) O(n²)", "B) O(n log n)", "C) O(n)", "D) O(log n)"],
+            "correctAnswer": "A",
+            "explanation": "Unbalanced partitioning in QuickSort produces an O(n²) worst-case recursion tree of height n.",
+            "topic": "Algorithm Analysis",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "In computer networking, which protocol provides connection-oriented, reliable byte-stream transmission with flow and congestion control?",
+            "options": ["A) TCP (Transmission Control Protocol)", "B) UDP", "C) IP", "D) ICMP"],
+            "correctAnswer": "A",
+            "explanation": "TCP establishes a 3-way handshake and handles sequence numbers, ACKs, and retransmissions for reliable delivery.",
+            "topic": "Computer Networks",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "What does ACID represent in transaction processing systems?",
+            "options": [
+                "A) Atomicity, Consistency, Isolation, Durability",
+                "B) Accuracy, Concurrency, Integrity, Distribution",
+                "C) Authentication, Control, Identity, Data",
+                "D) Allocation, Cache, Index, Directory"
+            ],
+            "correctAnswer": "A",
+            "explanation": "ACID properties ensure database reliability: Atomicity (all-or-nothing), Consistency (rules maintained), Isolation (independent transactions), Durability (persisted commits).",
+            "topic": "Database Systems",
+            "marks": 2,
+        },
+        # 6-10: SAQs (2 Marks each)
+        {
+            "type": "saq",
+            "questionText": "Explain the difference between Method Overloading (compile-time polymorphism) and Method Overriding (runtime polymorphism) with code examples.",
+            "options": None,
+            "correctAnswer": "Overloading: Multiple methods in the same class share the same name with different parameter signatures. Overriding: A subclass provides a specific implementation of a method defined in its superclass.",
+            "explanation": "Overloading resolves at compile time; overriding resolves dynamically at runtime based on the instantiated object type.",
+            "topic": "Polymorphism & OOP",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Write a Python function to implement Push and Pop operations for a Stack data structure using a standard list.",
+            "options": None,
+            "correctAnswer": "class Stack:\n    def __init__(self): self.items = []\n    def push(self, val): self.items.append(val)\n    def pop(self): return self.items.pop() if self.items else None",
+            "explanation": "List append() and pop() operate at the top of the stack in O(1) amortized time, preserving LIFO ordering.",
+            "topic": "Data Structures",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Given a SQL table 'Employees (emp_id, emp_name, dept_id, salary)', write a query to find the second highest salary without using LIMIT or TOP.",
+            "options": None,
+            "correctAnswer": "SELECT MAX(salary) AS Second_Highest FROM Employees WHERE salary < (SELECT MAX(salary) FROM Employees);",
+            "explanation": "The subquery finds the global maximum; the outer query finds the maximum of all values strictly less than that maximum.",
+            "topic": "SQL Queries",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Explain the 7 layers of the OSI (Open Systems Interconnection) reference model in top-down or bottom-up order.",
+            "options": None,
+            "correctAnswer": "Layer 7: Application, Layer 6: Presentation, Layer 5: Session, Layer 4: Transport, Layer 3: Network, Layer 2: Data Link, Layer 1: Physical.",
+            "explanation": "Conceptual framework standardizing communication functions across heterogeneous telecommunication protocols.",
+            "topic": "Computer Networks",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Explain the difference between Symmetric Key Encryption (AES) and Asymmetric Key Encryption (RSA).",
+            "options": None,
+            "correctAnswer": "Symmetric: Uses a single shared secret key for both encryption and decryption (faster, e.g., AES-256). Asymmetric: Uses a mathematically linked key pair: Public key for encryption, Private key for decryption (e.g., RSA-2048).",
+            "explanation": "Symmetric requires secure key exchange; asymmetric enables public key distribution and digital signatures.",
+            "topic": "Cybersecurity & Cryptography",
+            "marks": 2,
+        },
+    ],
+    "english": [
+        # 1-5: MCQs (2 Marks each)
+        {
+            "type": "mcq",
+            "questionText": "Identify the literary device used in: 'The wind whispered secret tales through the trembling autumn leaves.'",
+            "options": ["A) Personification", "B) Hyperbole", "C) Oxymoron", "D) Onomatopoeia"],
+            "correctAnswer": "A",
+            "explanation": "Personification attributes human actions ('whispered secret tales') to non-human elements (the wind).",
+            "topic": "Figures of Speech",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "Choose the correctly punctuated compound-complex sentence:",
+            "options": [
+                "A) Although the storm was severe, we continued our journey, and we arrived safely at midnight.",
+                "B) Although the storm was severe we continued our journey and we arrived safely at midnight.",
+                "C) Although the storm was severe, we continued our journey; and arrived safely at midnight.",
+                "D) The storm was severe, although we continued our journey and arrived safely at midnight."
+            ],
+            "correctAnswer": "A",
+            "explanation": "A dependent clause starting a sentence requires a comma, and compound independent clauses joined by coordinating conjunctions ('and') require a comma.",
+            "topic": "Sentence Structure",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "What is the meaning of the idiom 'To burn the midnight oil'?",
+            "options": [
+                "A) To work or study late into the night with diligence",
+                "B) To waste energy carelessly",
+                "C) To start a heated argument",
+                "D) To destroy evidence by fire"
+            ],
+            "correctAnswer": "A",
+            "explanation": "'Burning the midnight oil' refers to working or studying late into the night.",
+            "topic": "Idioms & Phrases",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "Identify the tone of an author who presents arguments objectively with empirical evidence and without emotional bias:",
+            "options": ["A) Analytical and Objective", "B) Sarcastic", "C) Melodramatic", "D) Cynical"],
+            "correctAnswer": "A",
+            "explanation": "An objective, analytical tone presents facts, logical evidence, and balanced reasoning without personal prejudice.",
+            "topic": "Reading Comprehension Analysis",
+            "marks": 2,
+        },
+        {
+            "type": "mcq",
+            "questionText": "Which subjunctive modal correctly completes: 'It is essential that every delegate _____ in attendance on time.'",
+            "options": ["A) be", "B) is", "C) was", "D) will be"],
+            "correctAnswer": "A",
+            "explanation": "The present subjunctive mood uses the base form of the verb ('be') following expressions of necessity or demand.",
+            "topic": "Advanced Grammar",
+            "marks": 2,
+        },
+        # 6-10: SAQs (2 Marks each)
+        {
+            "type": "saq",
+            "questionText": "Convert the following direct speech into reported (indirect) speech: He said, 'I have completed my doctoral thesis this morning.'",
+            "options": None,
+            "correctAnswer": "He said that he had completed his doctoral thesis that morning.",
+            "explanation": "Present perfect 'have completed' shifts to past perfect 'had completed', and temporal adverb 'this morning' shifts to 'that morning'.",
+            "topic": "Direct and Indirect Speech",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Explain the concept of 'Dramatic Irony' in literature and provide one classic example.",
+            "options": None,
+            "correctAnswer": "Dramatic Irony occurs when the audience/reader knows vital information that the characters do not (e.g., in Shakespeare's Romeo and Juliet, the audience knows Juliet is under a sleeping potion, but Romeo believes she is truly dead).",
+            "explanation": "Creates suspense, tension, and emotional engagement by giving the audience privileged foreknowledge.",
+            "topic": "Literary Devices",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Write the essential format components of a formal Business Letter of Inquiry.",
+            "options": None,
+            "correctAnswer": "Sender's Address, Date, Receiver's Designation and Address, Subject Line, Salutation, Body of Letter (Introduction, Specific Queries, Call to Action), Complimentary Close (e.g., 'Yours sincerely'), Signature and Designation.",
+            "explanation": "Standard formal communication layout follows clear structural hierarchy and professional etiquette.",
+            "topic": "Formal Writing Skills",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Identify the clause type and grammatical function of the underlined part: 'What you decided yesterday will determine our project timeline.'",
+            "options": None,
+            "correctAnswer": "'What you decided yesterday' is a Noun Clause functioning as the Subject of the main verb 'will determine'.",
+            "explanation": "A nominal clause acts as a noun; here it occupies the subject position of the sentence.",
+            "topic": "Clauses and Syntax",
+            "marks": 2,
+        },
+        {
+            "type": "saq",
+            "questionText": "Differentiate between 'Metaphor' and 'Simile' with one example of each expressing courage.",
+            "options": None,
+            "correctAnswer": "Simile: Explicit comparison using 'like' or 'as' (e.g., 'He fought as bravely as a lion in the battle'). Metaphor: Direct implicit comparison asserting one thing is another (e.g., 'He was a lion on the battlefield').",
+            "explanation": "Similes state analogy explicitly; metaphors equate tenor and vehicle directly.",
+            "topic": "Figures of Speech",
+            "marks": 2,
+        },
+    ],
+}
+
+
+import re
 
 def build_fallback_questions(
     board: str,
@@ -991,34 +1741,76 @@ def build_fallback_questions(
     force_mcq: bool = False,
 ) -> list[dict]:
     """Generates deterministic, grade-appropriate, subject-matched curriculum questions
-    matching the exact question count requested.
+    matching the exact question count requested across 3 distinct tiers:
+    Tier 1 (Class 1-4): 5 MCQs @ 1 Mark = 5 Marks (KIDS_QUESTION_BANKS)
+    Tier 2 (Class 5-10): 5 MCQs @ 1M + 5 SAQs @ 2M = 15 Marks (SECONDARY_QUESTION_BANKS)
+    Tier 3 (Class 11-12 / NEET / IIT): 10 Questions @ 2 Marks = 20 Marks (SENIOR_SECONDARY_BANKS)
     """
     clean_subj = (subject or "General Assessment").lower().strip()
     clean_grade = (class_grade or "").lower().strip()
-    is_kid = any(k in clean_grade for k in ["class 1", "class 2", "class 3", "class 4"])
+
+    # Accurate grade level classifier
+    is_kid = False
+    is_senior = False
+    if any(k in clean_grade for k in ["neet", "iit", "jee"]):
+        is_senior = True
+    else:
+        match = re.search(r'(?:class|grade)?\s*(\d+)', clean_grade)
+        if match:
+            cnum = int(match.group(1))
+            if 1 <= cnum <= 4:
+                is_kid = True
+            elif cnum >= 11:
+                is_senior = True
+        elif any(k in clean_grade for k in ["primary", "kindergarten", "ukg", "lkg"]):
+            is_kid = True
+        elif any(k in clean_grade for k in ["senior", "higher secondary", "isc"]):
+            is_senior = True
 
     # Determine bank category
-    bank_map = KIDS_QUESTION_BANKS if is_kid else SECONDARY_QUESTION_BANKS
+    if is_kid:
+        bank_map = KIDS_QUESTION_BANKS
+    elif is_senior:
+        bank_map = SENIOR_SECONDARY_BANKS
+    else:
+        bank_map = SECONDARY_QUESTION_BANKS
+
     matched_questions: list[dict] = []
 
-    if "comput" in clean_subj or "code" in clean_subj or "it" in clean_subj or "ai" in clean_subj:
+    if "chem" in clean_subj:
+        matched_questions = bank_map.get("chemistry", bank_map.get("science", []))
+    elif "phys" in clean_subj:
+        matched_questions = bank_map.get("physics", bank_map.get("science", []))
+    elif "bio" in clean_subj or "botan" in clean_subj or "zool" in clean_subj:
+        matched_questions = bank_map.get("biology", bank_map.get("science", []))
+    elif "comput" in clean_subj or "code" in clean_subj or "it" in clean_subj or "ai" in clean_subj:
         matched_questions = bank_map.get("computer science", [])
     elif "math" in clean_subj or "algebra" in clean_subj or "calculus" in clean_subj:
         matched_questions = bank_map.get("mathematics", [])
-    elif "eng" in clean_subj or "gramm" in clean_subj:
+    elif "eng" in clean_subj or "gramm" in clean_subj or "lit" in clean_subj:
         matched_questions = bank_map.get("english", [])
     elif "logic" in clean_subj or "reason" in clean_subj or "aptitude" in clean_subj:
         matched_questions = bank_map.get("logical reasoning", bank_map.get("mathematics", []))
     elif "social" in clean_subj or "hist" in clean_subj or "civic" in clean_subj or "geog" in clean_subj or "sst" in clean_subj:
-        matched_questions = bank_map.get("social studies", bank_map.get("science" if is_kid else "physics", []))
-    elif "sci" in clean_subj or "phys" in clean_subj or "chem" in clean_subj or "bio" in clean_subj or "evs" in clean_subj:
-        matched_questions = bank_map.get("science" if is_kid else "science", bank_map.get("physics", []))
+        matched_questions = bank_map.get("social studies", bank_map.get("science", []))
+    elif "sci" in clean_subj or "evs" in clean_subj:
+        matched_questions = bank_map.get("science", bank_map.get("chemistry" if is_senior else "computer science", []))
     else:
-        # Fallback to subject list or combine
-        matched_questions = bank_map.get("computer science" if "comp" in clean_subj else "science" if is_kid else "mathematics", [])
+        # Fallback based on tier
+        if is_kid:
+            matched_questions = bank_map.get("science", bank_map.get("mathematics", []))
+        elif is_senior:
+            matched_questions = bank_map.get("chemistry", bank_map.get("physics", bank_map.get("mathematics", [])))
+        else:
+            matched_questions = bank_map.get("science", bank_map.get("mathematics", []))
 
     if not matched_questions:
-        matched_questions = KIDS_QUESTION_BANKS["science"] if is_kid else SECONDARY_QUESTION_BANKS["computer science"]
+        if is_kid:
+            matched_questions = KIDS_QUESTION_BANKS["science"]
+        elif is_senior:
+            matched_questions = SENIOR_SECONDARY_BANKS.get("chemistry", SENIOR_SECONDARY_BANKS["mathematics"])
+        else:
+            matched_questions = SECONDARY_QUESTION_BANKS.get("science", SECONDARY_QUESTION_BANKS["computer science"])
 
     # Assemble questions up to limit
     result = []
@@ -1035,18 +1827,21 @@ def build_fallback_questions(
             q_copy["difficulty"] = difficulty
             if force_mcq:
                 q_copy["type"] = "mcq"
-                q_copy["marks"] = 1
+                q_copy["marks"] = 1 if is_kid else (2 if is_senior else 1)
                 if not q_copy.get("options") or len(q_copy.get("options", [])) < 2:
                     corr = q_copy.get("correctAnswer", "A")
                     q_copy["options"] = [f"A) {corr}", "B) Alternative Option B", "C) Alternative Option C", "D) Alternative Option D"]
                     q_copy["correctAnswer"] = "A"
             elif is_kid:
+                # Class 1 to 4: 5 MCQs @ 1 Mark = 5 Marks
                 q_copy["type"] = "mcq"
                 q_copy["marks"] = 1
-            elif any(k in clean_grade for k in ["class 11", "class 12", "neet", "iit"]):
+            elif is_senior:
+                # Class 11 to 12: 10 Questions @ 2 Marks = 20 Marks
+                # Respect individual question type (first 5 mcq, next 5 saq) with marks = 2
                 q_copy["marks"] = 2
             else:
-                # Class 5 to 10: 5 MCQs (1 mark) + 5 SAQs (2 marks)
+                # Class 5 to 10: 5 MCQs (1 mark) + 5 SAQs (2 marks) = 15 Marks
                 if len(result) < 5:
                     q_copy["type"] = "mcq"
                     q_copy["marks"] = 1
@@ -1058,3 +1853,4 @@ def build_fallback_questions(
             break
 
     return result
+
