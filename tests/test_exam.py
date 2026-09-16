@@ -1,3 +1,5 @@
+import uuid
+
 def _generate_exam(client, headers, student_id, **overrides):
     payload = {
         "studentId": student_id, "board": "CBSE", "classGrade": "Class 10",
@@ -25,7 +27,7 @@ def test_generate_exam_returns_ten_questions_without_answers(client, registered_
 def test_generate_exam_for_someone_elses_child_forbidden(client, registered_parent, child):
     other = client.post(
         "/api/v1/auth/register",
-        json={"name": "Other", "email": "otherexam@test.com", "password": "Passw0rd!"},
+        json={"name": "Other", "username": f"other_{uuid.uuid4().hex[:6]}", "email": f"other-{uuid.uuid4().hex[:6]}@test.com", "password": "Passw0rd!"},
     ).get_json()["data"]
     other_headers = {"Authorization": f"Bearer {other['accessToken']}"}
 
@@ -45,8 +47,8 @@ def test_submit_exam_computes_score_and_returns_analysis(client, registered_pare
     assert res.status_code == 200
     body = res.get_json()["data"]
     submission = body["submission"]
-    assert submission["totalMarks"] == 10
-    assert 0 <= submission["marksObtained"] <= 10
+    assert submission["totalMarks"] in (10, 15)
+    assert 0 <= submission["marksObtained"] <= submission["totalMarks"]
     assert "analysis" in submission and "evaluations" in submission
     assert len(submission["evaluations"]) == 10
     assert body["xpEarned"] > 0

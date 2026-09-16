@@ -398,7 +398,13 @@ def submit_exam(exam_id):
         if exam.status == "SUBMITTED":
             raise AppError("ALREADY_SUBMITTED", "This exam has already been submitted", 409)
 
-        evaluations, marks_obtained = evaluate_exam(exam.questions, answers)
+        evaluations, marks_obtained = evaluate_exam(
+            exam.questions,
+            answers,
+            board=exam.board,
+            class_grade=exam.class_grade,
+            subject=exam.subject,
+        )
         accuracy_percentage = round((marks_obtained / exam.total_marks) * 100, 2)
 
         student = session.get(Student, exam.student_id)
@@ -423,6 +429,7 @@ def submit_exam(exam_id):
                     id=str(uuid.uuid4()), submission_id=submission.id, question_id=ev["questionId"],
                     student_answer=ev["studentAnswer"], is_correct=ev["isCorrect"],
                     marks_awarded=ev["marksAwarded"], misconception_identified=ev["misconceptionIdentified"],
+                    feedback=ev.get("feedback"),
                 )
             )
 

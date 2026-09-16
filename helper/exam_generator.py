@@ -101,15 +101,19 @@ def _fetch_questions_from_db(
             logger.warning(f"Topic query failed, falling back to stored procedure: {e}")
 
     if not sp_rows:
-        sp_rows = session.execute(
-            text("CALL sp_generate_exam_from_db(:board, :class_grade, :subject, :difficulty)"),
-            {
-                "board": clean_board,
-                "class_grade": clean_class,
-                "subject": clean_subj,
-                "difficulty": clean_diff,
-            },
-        ).mappings().fetchall()
+        try:
+            sp_rows = session.execute(
+                text("CALL sp_generate_exam_from_db(:board, :class_grade, :subject, :difficulty)"),
+                {
+                    "board": clean_board,
+                    "class_grade": clean_class,
+                    "subject": clean_subj,
+                    "difficulty": clean_diff,
+                },
+            ).mappings().fetchall()
+        except Exception as e:
+            logger.warning(f"Stored procedure call skipped or failed: {e}")
+            sp_rows = []
 
     if not sp_rows:
         return []

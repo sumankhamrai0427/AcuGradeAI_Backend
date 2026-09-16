@@ -115,7 +115,7 @@ def evaluate_badge_unlocks(
     return newly_unlocked
 
 
-def get_leaderboard(session: Session, period: str = "all_time", limit: int = 50) -> list[dict]:
+def get_leaderboard(session: Session, period: str = "all_time", limit: int = 500) -> list[dict]:
     """period: daily | weekly | monthly | all_time. For non-all_time periods,
     ranks by XP earned within the window (from xp_events); all_time ranks by
     the student's running total."""

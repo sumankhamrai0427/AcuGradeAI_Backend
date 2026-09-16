@@ -241,7 +241,7 @@ class ExamSubmission(Base):
     exam_id = Column(String(36), ForeignKey("exams.id", ondelete="CASCADE"), nullable=False)
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
     answers = Column(JSON, nullable=False)
-    marks_obtained = Column(Integer, nullable=False)
+    marks_obtained = Column(Numeric(5, 2), default=0.0, nullable=False)
     total_marks = Column(Integer, default=10)
     accuracy_percentage = Column(Numeric(5, 2), nullable=False)
     time_taken_seconds = Column(Integer, nullable=False)
@@ -261,8 +261,9 @@ class QuestionEvaluation(Base):
     question_id = Column(String(36), ForeignKey("questions.id", ondelete="CASCADE"), nullable=False)
     student_answer = Column(String(500), nullable=False)
     is_correct = Column(Boolean, nullable=False)
-    marks_awarded = Column(Integer, nullable=False)
+    marks_awarded = Column(Numeric(4, 2), default=0.0, nullable=False)
     misconception_identified = Column(String(255), nullable=True)
+    feedback = Column(Text, nullable=True)
 
     question = relationship("Question")
 
